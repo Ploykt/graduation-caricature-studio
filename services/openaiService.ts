@@ -13,14 +13,14 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
       messages: [
         {
           role: "system",
-          content: "You are an expert character designer for animation. Your task is to extract visual attributes from a reference photo to create a stylized avatar. Focus purely on physical traits. Do not attempt to identify the person."
+          content: "You are a Technical Art Director for an animation studio. Your job is to analyze reference photos to create character descriptions for 3D modelers. Focus strictly on physical visual traits. Do NOT attempt to identify the real person."
         },
         {
           role: "user",
           content: [
             { 
               type: "text", 
-              text: "Analyze the visual features of the character in this image for an artistic caricature. Describe the following concisely: \n1. Hair (style, color, length)\n2. Skin tone and complexion\n3. Facial hair (beard/mustache) if any\n4. Glasses (if any)\n5. Gender and approximate age group\n6. Key facial structure (e.g., round face, sharp jawline)\n\nKeep it objective and descriptive for an artist." 
+              text: "Create a detailed visual description of the person in this image to be used as a prompt for an AI image generator. \n\nFocus strictly on:\n1. Face Shape & Structure (e.g., round, oval, sharp jawline, high cheekbones)\n2. Skin Tone & Complexion (be specific, e.g., olive, fair, deep brown)\n3. Eyes (shape, color, eyebrows)\n4. Hair (exact style, texture, color, length)\n5. Facial Hair (beard/mustache style if any)\n6. Distinctive features (glasses style, freckles, dimples)\n7. Age approximation (e.g., young adult)\n\nDo NOT describe their current clothing. Do NOT mention the background. Output as a comma-separated descriptive list." 
             },
             {
               type: "image_url",
@@ -31,7 +31,7 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
           ]
         }
       ],
-      max_tokens: 200
+      max_tokens: 300
     })
   });
 
@@ -42,10 +42,10 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error("A IA não retornou nenhuma descrição.");
 
-  // Check for privacy refusal
-  const refusalKeywords = ["I'm sorry", "I cannot", "I can't", "identify", "privacy"];
-  if (refusalKeywords.some(keyword => content.startsWith(keyword))) {
-    console.warn("Vision Refusal:", content);
+  // Validation: Check for privacy refusal
+  const refusalKeywords = ["I'm sorry", "I cannot", "I can't", "identify", "privacy", "unable to"];
+  if (refusalKeywords.some(keyword => content.toLowerCase().startsWith(keyword.toLowerCase()))) {
+    console.warn("Vision Refusal detected:", content);
     throw new Error("PRIVACY_REFUSAL");
   }
 
@@ -66,7 +66,7 @@ async function generateWithDalle3(apiKey: string, prompt: string, size: string):
       n: 1,
       size: size, 
       response_format: "b64_json",
-      quality: "standard"
+      quality: "hd" // Changed to HD for better details
     })
   });
 
@@ -91,37 +91,47 @@ export const generateOpenAICaricature = async (
     console.log("Analysis:", physicalDescription);
   } catch (error: any) {
     if (error.message === "PRIVACY_REFUSAL") {
-      throw new Error("A IA de visão recusou analisar esta foto por motivos de privacidade. Tente uma foto diferente ou menos realista.");
+      // Fallback description if blocked, generic but safe
+      physicalDescription = "A happy young adult graduate with a friendly smile";
+      console.warn("Using fallback description due to privacy filter.");
+    } else {
+      throw error;
     }
-    throw error;
   }
 
   // 2. Build the Prompt
   const stylePrompt = style === ArtStyle.ThreeD
-    ? `Style: 3D Pixar-style animation render, cute, vibrant, volumetric lighting, 3d render engine.`
-    : `Style: High-quality 2D digital illustration, smooth shading, semi-realistic caricature art, digital painting.`;
+    ? `Style: 3D Pixar/Disney style animation render. Cute proportions, big expressive eyes, smooth plastic-like skin texture, volumetric studio lighting, Octane render.`
+    : `Style: High-end digital 2D painting, semi-realistic caricature, smooth shading, vibrant colors, clean lines, artstation quality.`;
 
-  const finalPrompt = `Create a professional graduation caricature based on this description: ${physicalDescription}.
+  const framingPrompt = framing === Framing.FullBody
+    ? `View: Full body shot, showing shoes and full gown.`
+    : `View: Medium shot, head and torso.`;
+
+  const finalPrompt = `Create a professional Graduation Caricature.
   
-  IMPORTANT OUTFIT & THEME:
-  - The character is wearing a black graduation gown (beca).
-  - Wearing a mortarboard cap (capelo) on the head.
+  CHARACTER VISUALS (Strictly follow this):
+  ${physicalDescription}
+  
+  OUTFIT (Mandatory):
+  - Wearing a traditional black academic Graduation Gown (Beca).
+  - Wearing a Graduation Cap (Mortarboard/Capelo) with a tassel on the head.
+  - The sash/stole accent color should represent the course: ${courseName}.
   - Holding a rolled diploma with a ribbon.
-  - Theme/Sash color highlights: ${courseName} theme colors.
   
   SETTING:
-  - Background: Festive abstract bokeh studio lighting.
+  - Background: Abstract festive studio bokeh lights (gold and blurry).
+  - Expression: Very happy, proud, big smile.
   
-  ART DIRECTION:
+  TECHNICAL:
   - ${stylePrompt}
-  - Expression: Happy, smiling, proud.
-  - Resemblance: Try to match the description traits (hair, skin, glasses) as closely as possible.
-  - Quality: 8k resolution, masterpiece.`;
+  - ${framingPrompt}
+  - High resolution, masterpiece, sharp focus on the face.`;
 
   // 3. Determine Size
   const size = framing === Framing.FullBody ? "1024x1792" : "1024x1024";
 
   // 4. Generate
-  console.log("Generating with DALL-E 3...");
+  console.log("Generating with DALL-E 3...", finalPrompt);
   return await generateWithDalle3(apiKey, finalPrompt, size);
 };

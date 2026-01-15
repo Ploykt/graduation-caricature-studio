@@ -5,23 +5,28 @@ const buildPrompt = (config: UserConfig): string => {
   const { style, framing, courseName } = config;
 
   const stylePrompt = style === ArtStyle.ThreeD
-    ? `Style: Semi-realistic 3D render, similar to modern animation films (Pixar/Disney style). High-quality textures, subsurface scattering on skin, vibrant colors, cinematic lighting.`
-    : `Style: High-end Digital 2D Illustration. Smooth digital oil painting technique, clean semi-realistic lines, sophisticated shading.`;
+    ? `Style: 3D Animation Style (Pixar-esque). High fidelity, subsurface scattering, cute but recognizable features, cinematic lighting, 3D render.`
+    : `Style: Professional Digital Caricature. Semi-realistic painting style, smooth brushwork, high detail, vibrant colors.`;
 
   const framingPrompt = framing === Framing.FullBody
-    ? `FULL BODY shot, showing the complete academic gown from head to toe.`
-    : `PORTRAIT shot, focused on head and shoulders.`;
+    ? `Full body shot, showing the entire gown and shoes.`
+    : `Portrait shot, focused on head and shoulders.`;
 
-  return `Create a high-quality professional digital graduation caricature.
-${stylePrompt}
-${framingPrompt}
-The person MUST be wearing a professional black academic graduation gown (beca) and a mortarboard (capelo) with a tassel.
-Holding a rolled diploma with a red or gold ribbon.
-Course Context (use for subtle details/colors if applicable): ${courseName}.
-Background: Professional studio setting with elegant bokeh, subtle festive particles.
-Friendly, triumphant, and proud expression.
-Quality: 8k resolution, masterpiece.
-NO text, NO watermarks.`;
+  return `You are a professional caricature artist. 
+  Task: Create a graduation caricature based on the person in the attached image.
+  
+  CRITICAL INSTRUCTIONS:
+  1. PRESERVE IDENTITY: The character MUST look like the person in the image (same hair, skin tone, glasses, facial hair, face shape).
+  2. OUTFIT: The character MUST be wearing a Black Academic Graduation Gown (Beca) and a Mortarboard Cap (Capelo).
+  3. ACCESSORIES: Holding a rolled diploma.
+  4. THEME: Add a sash or details in colors representing the course: ${courseName}.
+  
+  ${stylePrompt}
+  ${framingPrompt}
+  
+  Background: Elegant studio lighting, celebratory atmosphere, blurred bokeh.
+  Expression: Proud, smiling, triumphant.
+  Quality: 8k, masterpiece, highly detailed.`;
 };
 
 // Helper to handle Gemini Content Generation (Multimodal)
@@ -56,13 +61,11 @@ async function generateWithGemini(ai: GoogleGenAI, prompt: string, imageBase64: 
   throw new Error("Nenhuma imagem encontrada na resposta.");
 }
 
-// Helper to handle Imagen Generation (Text-to-Image mostly, but we pass prompt description of the person)
+// Helper to handle Imagen Generation (Fallback)
 async function generateWithImagen(ai: GoogleGenAI, prompt: string, aspectRatio: string) {
-  // Imagen 3 doesn't support image-to-image in the same way via the public SDK mostly, 
-  // so we rely on a strong descriptive prompt.
   const response = await ai.models.generateImages({
     model: 'imagen-3.0-generate-001',
-    prompt: prompt + " The character should resemble a generic student fitting the description.",
+    prompt: prompt + " The character is a generic happy graduate student.",
     config: {
       numberOfImages: 1,
       aspectRatio: aspectRatio,
@@ -82,7 +85,8 @@ export const generateCaricature = async (
   config: UserConfig
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey });
-  const cleanBase64 = imageBase64.split(',')[1] || imageBase64;
+  // Ensure strict cleaning of base64
+  const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
   const aspectRatio = config.framing === Framing.FullBody ? "9:16" : "1:1";
   const prompt = buildPrompt(config);
 
@@ -94,19 +98,16 @@ export const generateCaricature = async (
   } catch (error: any) {
     console.warn("Gemini 2.0 failed, trying fallback...", error.message);
 
-    // If quota exceeded or model overloaded, try Imagen
     if (error.status === 429 || error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
       try {
         console.log("Attempting fallback with Imagen 3.0...");
         return await generateWithImagen(ai, prompt, aspectRatio);
       } catch (imagenError: any) {
         console.error("Imagen fallback failed:", imagenError);
-        // Throw the original 'busy' error to show the friendly message
-        throw new Error("⚠️ Alto Tráfego: Os servidores gratuitos do Google estão ocupados no momento. Por favor, aguarde 1 minuto e tente novamente.");
+        throw new Error("⚠️ Alto Tráfego: Os servidores do Google estão ocupados. Aguarde 1 minuto.");
       }
     }
     
-    // Pass through other errors (like Invalid Key)
     if (error.status === 403 || error.message?.includes('403') || error.message?.includes('API key')) {
       throw new Error("INVALID_KEY");
     }
