@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { ArtStyle, Framing, UserConfig, LoadingState } from './types';
 import { generateCaricature } from './services/geminiService';
+import { generateOpenAICaricature } from './services/openaiService';
 import ImageUploader from './components/ImageUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ResultDisplay from './components/ResultDisplay';
 import LoadingOverlay from './components/LoadingOverlay';
 import ApiKeyModal from './components/ApiKeyModal';
-import { GraduationCap, Wand2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Cpu } from 'lucide-react';
 
 const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string>('');
@@ -22,6 +23,7 @@ const App: React.FC = () => {
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [providerName, setProviderName] = useState<string>('');
 
   useEffect(() => {
     // 1. Check Env
@@ -57,17 +59,32 @@ const App: React.FC = () => {
     setErrorMsg(null);
 
     try {
-      const generatedBase64 = await generateCaricature(apiKey, image, config);
+      let generatedBase64;
+      
+      // Auto-detect provider based on Key format
+      if (apiKey.startsWith('sk-')) {
+        setProviderName('OpenAI (DALL-E 3)');
+        generatedBase64 = await generateOpenAICaricature(apiKey, image, config);
+      } else {
+        setProviderName('Google Gemini');
+        generatedBase64 = await generateCaricature(apiKey, image, config);
+      }
+
       setResultImage(generatedBase64);
       setLoadingState('success');
     } catch (error: any) {
       console.error(error);
       setLoadingState('error');
-      if (error.message === 'INVALID_KEY') {
+      
+      const msg = error.message || "";
+      
+      if (msg === 'INVALID_KEY' || msg.includes('401')) {
         setErrorMsg("Chave de API inválida ou expirada.");
         setShowKeyModal(true);
+      } else if (msg.includes('429') || msg.includes('billing')) {
+         setErrorMsg("Erro de Cota/Faturamento: Verifique seus créditos na plataforma da IA.");
       } else {
-        setErrorMsg(error.message || "Algo deu errado. Por favor, tente novamente.");
+        setErrorMsg(msg || "Algo deu errado. Por favor, tente novamente.");
       }
     }
   };
@@ -77,6 +94,7 @@ const App: React.FC = () => {
     setImage(null);
     setLoadingState('idle');
     setErrorMsg(null);
+    setProviderName('');
   };
 
   return (
@@ -103,7 +121,7 @@ const App: React.FC = () => {
         <div className="flex justify-center gap-4 text-xs text-slate-500 pt-2">
           <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Alta Resolução (8K)</span>
           <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Trajes Oficiais</span>
-          <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Estúdio 3D ou 2D</span>
+          <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Google Gemini & OpenAI</span>
         </div>
       </header>
 
@@ -131,6 +149,13 @@ const App: React.FC = () => {
               <AlertCircle className="flex-shrink-0" />
               <p className="text-sm font-medium">{errorMsg}</p>
             </div>
+          )}
+
+          {/* Provider Indicator (Subtle) */}
+          {providerName && resultImage && (
+             <div className="mt-2 text-center text-xs text-slate-600 flex items-center justify-center gap-1">
+                <Cpu size={12}/> Gerado via {providerName}
+             </div>
           )}
         </div>
 
@@ -172,7 +197,7 @@ const App: React.FC = () => {
                   )}
                 </button>
                 <p className="text-center text-xs text-slate-500 mt-3">
-                  A IA criará uma versão única baseada nos seus traços.
+                  A IA detectará automaticamente qual chave você está usando.
                 </p>
               </div>
             </div>
@@ -183,10 +208,10 @@ const App: React.FC = () => {
       {/* Footer */}
       <footer className="mt-24 text-center space-y-2 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl">
         <p className="text-slate-500 text-sm">
-          Graduation Studio AI &copy; 2024. Desenvolvido com tecnologia Google Gemini Pro Vision.
+          Graduation Studio AI &copy; 2024. 
         </p>
         <p className="text-slate-600 text-xs">
-          Nota: As imagens são geradas por inteligência artificial e podem apresentar variações artísticas.
+          Suporta chaves Google AI Studio & OpenAI.
         </p>
       </footer>
     </div>

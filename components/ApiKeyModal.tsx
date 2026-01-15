@@ -24,7 +24,8 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onSave }) => {
           </div>
           <h2 className="text-2xl font-bold text-white text-center">Acesso ao Estúdio</h2>
           <p className="text-slate-400 text-center mt-3 text-sm leading-relaxed">
-            Para iniciar a produção, insira sua <strong>Chave API do Google Gemini</strong> abaixo.
+            Insira sua chave de API para começar. <br/>
+            Aceitamos <strong>Google Gemini</strong> (Grátis) ou <strong>OpenAI</strong> (Créditos).
           </p>
         </div>
 
@@ -34,7 +35,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onSave }) => {
               type="password"
               value={keyInput}
               onChange={(e) => setKeyInput(e.target.value)}
-              placeholder="Cole sua chave aqui (AIzaSy...)"
+              placeholder="Cole sua chave (AIza... ou sk-...)"
               className="w-full glass-input px-4 py-3.5 rounded-xl text-white placeholder-slate-600 focus:ring-2 focus:ring-gold-500/50 transition-all text-center tracking-widest"
               required
             />
@@ -47,7 +48,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onSave }) => {
           </button>
         </form>
         <p className="text-[10px] text-slate-600 mt-6 text-center">
-          Sua chave é armazenada apenas no seu navegador e usada exclusivamente para gerar as imagens.
+          O sistema detecta automaticamente qual provedor usar pelo formato da chave.
         </p>
       </div>
     </div>
