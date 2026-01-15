@@ -1,0 +1,7 @@
+{
+  "name": "Graduation Caricature Studio",
+  "description": "Transform your selfies into professional graduation caricatures using Gemini AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

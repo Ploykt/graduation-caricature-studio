@@ -1,0 +1,117 @@
+import React from 'react';
+import { UserConfig, ArtStyle, Framing } from '../types';
+import { GraduationCap, Palette, Frame, User, BookOpen } from 'lucide-react';
+
+interface ConfigPanelProps {
+  config: UserConfig;
+  onChange: (newConfig: UserConfig) => void;
+  disabled: boolean;
+}
+
+const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled }) => {
+  const updateConfig = (key: keyof UserConfig, value: any) => {
+    onChange({ ...config, [key]: value });
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Course Name */}
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 text-gold-400 font-bold text-sm uppercase tracking-wider">
+          <BookOpen size={16} />
+          <span>Curso / Formação</span>
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            value={config.courseName}
+            onChange={(e) => updateConfig('courseName', e.target.value)}
+            placeholder="ex: Enfermagem, Direito, Engenharia..."
+            disabled={disabled}
+            className="w-full glass-input p-4 pl-12 rounded-xl text-lg font-medium placeholder-slate-500 focus:ring-2 focus:ring-gold-500/50 transition-all border-slate-700"
+          />
+          <GraduationCap className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500" size={20} />
+        </div>
+        <p className="text-xs text-slate-500">Isso adapta a cor da faixa e detalhes do diploma.</p>
+      </div>
+
+      {/* Art Style Selection */}
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 text-purple-400 font-bold text-sm uppercase tracking-wider">
+          <Palette size={16} />
+          <span>Estilo Artístico</span>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => updateConfig('style', ArtStyle.ThreeD)}
+            disabled={disabled}
+            className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all relative overflow-hidden group ${
+              config.style === ArtStyle.ThreeD
+                ? 'bg-purple-600/20 border-purple-500 text-white shadow-[0_0_20px_rgba(147,51,234,0.15)]'
+                : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            <span className="text-2xl mb-1 relative z-10">🧊</span>
+            <span className="font-semibold text-sm relative z-10">3D Estilo Cinema</span>
+            {config.style === ArtStyle.ThreeD && (
+               <div className="absolute inset-0 bg-gradient-to-t from-purple-900/50 to-transparent"></div>
+            )}
+          </button>
+          
+          <button
+            onClick={() => updateConfig('style', ArtStyle.TwoD)}
+            disabled={disabled}
+            className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all relative overflow-hidden ${
+              config.style === ArtStyle.TwoD
+                ? 'bg-purple-600/20 border-purple-500 text-white shadow-[0_0_20px_rgba(147,51,234,0.15)]'
+                : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            <span className="text-2xl mb-1 relative z-10">🎨</span>
+            <span className="font-semibold text-sm relative z-10">Pintura Digital</span>
+             {config.style === ArtStyle.TwoD && (
+               <div className="absolute inset-0 bg-gradient-to-t from-purple-900/50 to-transparent"></div>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Framing Selection */}
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 text-sky-400 font-bold text-sm uppercase tracking-wider">
+          <Frame size={16} />
+          <span>Enquadramento</span>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => updateConfig('framing', Framing.Portrait)}
+            disabled={disabled}
+            className={`p-3 rounded-xl border flex items-center justify-center gap-3 transition-all ${
+              config.framing === Framing.Portrait
+                ? 'bg-sky-600/20 border-sky-500 text-white shadow-[0_0_15px_rgba(14,165,233,0.15)]'
+                : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            <User size={18} />
+            <span className="font-medium text-sm">Retrato (1:1)</span>
+          </button>
+          
+          <button
+            onClick={() => updateConfig('framing', Framing.FullBody)}
+            disabled={disabled}
+            className={`p-3 rounded-xl border flex items-center justify-center gap-3 transition-all ${
+              config.framing === Framing.FullBody
+                ? 'bg-sky-600/20 border-sky-500 text-white shadow-[0_0_15px_rgba(14,165,233,0.15)]'
+                : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            <Frame size={18} />
+            <span className="font-medium text-sm">Corpo Inteiro (9:16)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ConfigPanel;
