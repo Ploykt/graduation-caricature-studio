@@ -5,36 +5,49 @@ const buildPrompt = (config: UserConfig): string => {
   const { style, framing, courseName, background } = config;
 
   const stylePrompt = style === ArtStyle.ThreeD
-    ? `Semi-realistic 3D Pixar animation style. Smooth textures, soft lighting, subtle subsurface scattering, vibrant but natural colors.`
-    : `High-end digital oil painting style. Visible brush strokes, artistic texture, painterly aesthetic.`;
+    ? `Style: 3D Pixar Animation Style. 
+       - Look: High-end 3D render (Cinema4D/Octane).
+       - Features: Smooth skin texture, subsurface scattering, cute proportions but RECOGNIZABLE.
+       - Lighting: Studio lighting, rim lights.`
+    : `Style: Digital Painting Caricature.
+       - Look: High-quality digital art, semi-realistic.
+       - Features: Artistic brush strokes, vibrant colors.`;
 
   const framingPrompt = framing === Framing.FullBody
-    ? `Full body shot showing academic gown from head to toe.`
-    : `Head and shoulders portrait, tight framing.`;
+    ? `Framing: Full Body Shot (Head to Toe). Ensure the gown and shoes are visible.`
+    : `Framing: Head and Shoulders Portrait. Focus on the face.`;
 
   const backgroundPrompt = {
-    [BackgroundOption.Studio]: "Professional photography studio with soft gradient background, subtle bokeh effect.",
-    [BackgroundOption.Campus]: "University campus background, blurred architecture, academic atmosphere.",
-    [BackgroundOption.Festive]: "Graduation-themed background with golden confetti, celebration lights."
+    [BackgroundOption.Studio]: "Background: Professional studio backdrop, soft lighting, neutral tones.",
+    [BackgroundOption.Campus]: "Background: Blurred university campus, academic architecture.",
+    [BackgroundOption.Festive]: "Background: Gold bokeh lights, falling confetti, celebratory atmosphere."
   }[background];
 
-  return `Create a professional graduation caricature portrait based on the attached image.
-
-## CRITICAL RULES:
-1. PRESERVE FACIAL IDENTITY: The character MUST look like the person in the image (same hair, skin tone, glasses, facial hair, face shape).
-2. ACADEMIC ACCURACY: Wear Black Academic Graduation Gown (Beca) and Mortarboard Cap (Capelo).
-3. COURSE THEME: Add sash/details in colors representing: ${courseName}.
-
-## ART STYLE:
-${stylePrompt}
-
-## COMPOSITION:
-${framingPrompt}
-
-## BACKGROUND:
-${backgroundPrompt}
-
-Technical: 8k resolution, sharp focus, masterpiece.`;
+  return `You are a professional caricature artist.
+  
+  TASK:
+  Generate a high-quality graduation caricature of the person in the input image.
+  
+  ⚠️ IDENTITY PRESERVATION (CRITICAL):
+  - The output character MUST look exactly like the person in the provided image.
+  - Match their specific: Hair style, Hair color, Skin tone, Eye shape, Facial hair, and Face structure.
+  - If they wear glasses in the photo, include them.
+  
+  OUTFIT & THEME:
+  - Subject is wearing a Black Academic Graduation Gown (Beca).
+  - Subject is wearing a Mortarboard Cap (Capelo) on their head.
+  - Subject has a Sash/Stole representing the course: "${courseName}" (Use appropriate colors for this course).
+  - Subject is holding a Diploma scroll.
+  
+  VISUAL STYLE:
+  ${stylePrompt}
+  
+  COMPOSITION:
+  ${framingPrompt}
+  ${backgroundPrompt}
+  
+  Expression: Happy, proud, smiling.
+  Quality: 8k, Masterpiece, Sharp focus.`;
 };
 
 // Helper to handle Gemini Content Generation (Multimodal)
