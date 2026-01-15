@@ -1,6 +1,6 @@
 import React from 'react';
-import { UserConfig, ArtStyle, Framing } from '../types';
-import { GraduationCap, Palette, Frame, User, BookOpen } from 'lucide-react';
+import { UserConfig, ArtStyle, Framing, BackgroundOption } from '../types';
+import { GraduationCap, Palette, Frame, User, BookOpen, Image as ImageIcon } from 'lucide-react';
 
 interface ConfigPanelProps {
   config: UserConfig;
@@ -14,7 +14,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Course Name */}
       <div className="space-y-3">
         <label className="flex items-center gap-2 text-gold-400 font-bold text-sm uppercase tracking-wider">
@@ -108,6 +108,35 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
             <Frame size={18} />
             <span className="font-medium text-sm">Corpo Inteiro (9:16)</span>
           </button>
+        </div>
+      </div>
+
+       {/* Background Selection */}
+       <div className="space-y-3">
+        <label className="flex items-center gap-2 text-emerald-400 font-bold text-sm uppercase tracking-wider">
+          <ImageIcon size={16} />
+          <span>Fundo / Ambiente</span>
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { id: BackgroundOption.Studio, label: 'Estúdio', icon: '📸' },
+            { id: BackgroundOption.Festive, label: 'Festa', icon: '✨' },
+            { id: BackgroundOption.Campus, label: 'Campus', icon: '🏛️' },
+          ].map((bg) => (
+            <button
+              key={bg.id}
+              onClick={() => updateConfig('background', bg.id)}
+              disabled={disabled}
+              className={`p-2 py-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                config.background === bg.id
+                  ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+                  : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:bg-slate-800'
+              }`}
+            >
+              <span className="text-lg">{bg.icon}</span>
+              <span className="font-medium text-xs">{bg.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
-import { UserConfig, ArtStyle, Framing } from "../types";
+import { UserConfig, ArtStyle, Framing, BackgroundOption } from "../types";
 
-// Helper to analyze facial features using GPT-4o Vision
+// 1. ANALYSIS STEP: Technical Art Director Persona
 async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promise<string> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -20,7 +20,15 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
           content: [
             { 
               type: "text", 
-              text: "Create a detailed visual description of the person in this image to be used as a prompt for an AI image generator. \n\nFocus strictly on:\n1. Face Shape & Structure (e.g., round, oval, sharp jawline, high cheekbones)\n2. Skin Tone & Complexion (be specific, e.g., olive, fair, deep brown)\n3. Eyes (shape, color, eyebrows)\n4. Hair (exact style, texture, color, length)\n5. Facial Hair (beard/mustache style if any)\n6. Distinctive features (glasses style, freckles, dimples)\n7. Age approximation (e.g., young adult)\n\nDo NOT describe their current clothing. Do NOT mention the background. Output as a comma-separated descriptive list." 
+              text: `Analyze this graduation photo and extract for caricature generation:
+              1. FACE SHAPE: [oval, round, square, heart, diamond]
+              2. SKIN TONE: [fair, light, medium, olive, tan, brown, dark] with undertones [cool, warm, neutral]
+              3. EYES: [color] + [shape: almond, round, monolid, hooded] + [eyebrows]
+              4. HAIR: [color] + [style: straight, wavy, curly, afro] + [length]
+              5. DISTINCTIVE FEATURES: [glasses yes/no, beard yes/no, facial hair style, prominent nose, smile type]
+              6. EXPRESSION: [neutral, smiling, serious, happy, confident]
+              
+              Return ONLY this structured data as a list. Do not write an intro or conclusion.` 
             },
             {
               type: "image_url",
@@ -31,7 +39,7 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
           ]
         }
       ],
-      max_tokens: 300
+      max_tokens: 350
     })
   });
 
@@ -52,7 +60,7 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
   return content;
 }
 
-// Helper to generate image with DALL-E 3
+// 2. GENERATION STEP: DALL-E 3 with Template
 async function generateWithDalle3(apiKey: string, prompt: string, size: string): Promise<string> {
   const response = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
@@ -66,7 +74,7 @@ async function generateWithDalle3(apiKey: string, prompt: string, size: string):
       n: 1,
       size: size, 
       response_format: "b64_json",
-      quality: "hd" // Changed to HD for better details
+      quality: "hd" 
     })
   });
 
@@ -80,7 +88,7 @@ export const generateOpenAICaricature = async (
   imageBase64: string,
   config: UserConfig
 ): Promise<string> => {
-  const { style, framing, courseName } = config;
+  const { style, framing, courseName, background } = config;
 
   // 1. Analyze the face
   console.log("Analyzing image with GPT-4o...");
@@ -88,50 +96,64 @@ export const generateOpenAICaricature = async (
   
   try {
     physicalDescription = await analyzeImageWithGPT4o(apiKey, imageBase64);
-    console.log("Analysis:", physicalDescription);
+    console.log("Analysis Result:", physicalDescription);
   } catch (error: any) {
     if (error.message === "PRIVACY_REFUSAL") {
-      // Fallback description if blocked, generic but safe
-      physicalDescription = "A happy young adult graduate with a friendly smile";
+      physicalDescription = "FACE SHAPE: Oval\nSKIN TONE: Natural medium\nEYES: Happy, smiling\nHAIR: Neatly styled\nEXPRESSION: Proud and happy graduate";
       console.warn("Using fallback description due to privacy filter.");
     } else {
       throw error;
     }
   }
 
-  // 2. Build the Prompt
+  // 2. Map Configuration to Prompts
   const stylePrompt = style === ArtStyle.ThreeD
-    ? `Style: 3D Pixar/Disney style animation render. Cute proportions, big expressive eyes, smooth plastic-like skin texture, volumetric studio lighting, Octane render.`
-    : `Style: High-end digital 2D painting, semi-realistic caricature, smooth shading, vibrant colors, clean lines, artstation quality.`;
+    ? `Semi-realistic 3D Pixar animation style. Smooth textures, soft lighting, subtle subsurface scattering, vibrant but natural colors. Character should look like a high-end 3D render.`
+    : `High-end digital oil painting style. Visible brush strokes, artistic texture, painterly aesthetic, subtle canvas texture. Impasto texture, blended color transitions.`;
 
   const framingPrompt = framing === Framing.FullBody
-    ? `View: Full body shot, showing shoes and full gown.`
-    : `View: Medium shot, head and torso.`;
+    ? `Full body shot showing academic gown from head to toe, natural standing pose.`
+    : `Head and shoulders portrait, tight framing, emphasis on facial features and expression.`;
 
-  const finalPrompt = `Create a professional Graduation Caricature.
-  
-  CHARACTER VISUALS (Strictly follow this):
-  ${physicalDescription}
-  
-  OUTFIT (Mandatory):
-  - Wearing a traditional black academic Graduation Gown (Beca).
-  - Wearing a Graduation Cap (Mortarboard/Capelo) with a tassel on the head.
-  - The sash/stole accent color should represent the course: ${courseName}.
-  - Holding a rolled diploma with a ribbon.
-  
-  SETTING:
-  - Background: Abstract festive studio bokeh lights (gold and blurry).
-  - Expression: Very happy, proud, big smile.
-  
-  TECHNICAL:
-  - ${stylePrompt}
-  - ${framingPrompt}
-  - High resolution, masterpiece, sharp focus on the face.`;
+  const backgroundPrompt = {
+    [BackgroundOption.Studio]: "Professional photography studio with soft gradient background, subtle bokeh effect.",
+    [BackgroundOption.Campus]: "University campus background, blurred architecture (columns/library), academic atmosphere.",
+    [BackgroundOption.Festive]: "Graduation-themed background with golden confetti, celebration lights, soft bokeh."
+  }[background];
 
-  // 3. Determine Size
+  // 3. Construct Final Prompt
+  const finalPrompt = `Create a professional graduation caricature portrait.
+
+## PERSON DESCRIPTION (from analysis):
+${physicalDescription}
+
+## ART STYLE:
+${stylePrompt}
+
+## COMPOSITION:
+${framingPrompt}
+
+## BACKGROUND:
+${backgroundPrompt}
+
+## ACADEMIC ELEMENTS:
+- Black graduation gown (academic robe)
+- Mortarboard cap with tassel
+- Diploma scroll with ribbon
+- Sash/Stole colors representing: ${courseName}
+- Professional, proud, confident expression
+
+## TECHNICAL SPECS:
+- High resolution (8K quality)
+- Sharp focus on face
+- Consistent lighting from front
+- Maintain person's identity and distinctive features
+- NO text, NO watermarks`;
+
+  // 4. Determine Size
   const size = framing === Framing.FullBody ? "1024x1792" : "1024x1024";
 
-  // 4. Generate
+  // 5. Generate
   console.log("Generating with DALL-E 3...", finalPrompt);
   return await generateWithDalle3(apiKey, finalPrompt, size);
 };

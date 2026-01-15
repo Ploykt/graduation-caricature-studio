@@ -8,10 +8,17 @@ export enum Framing {
   FullBody = 'FULL_BODY',
 }
 
+export enum BackgroundOption {
+  Studio = 'STUDIO',
+  Campus = 'CAMPUS',
+  Festive = 'FESTIVE',
+}
+
 export interface UserConfig {
   courseName: string;
   style: ArtStyle;
   framing: Framing;
+  background: BackgroundOption;
 }
 
 export interface GeneratedResult {

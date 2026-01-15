@@ -1,32 +1,40 @@
 import { GoogleGenAI } from "@google/genai";
-import { UserConfig, ArtStyle, Framing } from "../types";
+import { UserConfig, ArtStyle, Framing, BackgroundOption } from "../types";
 
 const buildPrompt = (config: UserConfig): string => {
-  const { style, framing, courseName } = config;
+  const { style, framing, courseName, background } = config;
 
   const stylePrompt = style === ArtStyle.ThreeD
-    ? `Style: 3D Animation Style (Pixar-esque). High fidelity, subsurface scattering, cute but recognizable features, cinematic lighting, 3D render.`
-    : `Style: Professional Digital Caricature. Semi-realistic painting style, smooth brushwork, high detail, vibrant colors.`;
+    ? `Semi-realistic 3D Pixar animation style. Smooth textures, soft lighting, subtle subsurface scattering, vibrant but natural colors.`
+    : `High-end digital oil painting style. Visible brush strokes, artistic texture, painterly aesthetic.`;
 
   const framingPrompt = framing === Framing.FullBody
-    ? `Full body shot, showing the entire gown and shoes.`
-    : `Portrait shot, focused on head and shoulders.`;
+    ? `Full body shot showing academic gown from head to toe.`
+    : `Head and shoulders portrait, tight framing.`;
 
-  return `You are a professional caricature artist. 
-  Task: Create a graduation caricature based on the person in the attached image.
-  
-  CRITICAL INSTRUCTIONS:
-  1. PRESERVE IDENTITY: The character MUST look like the person in the image (same hair, skin tone, glasses, facial hair, face shape).
-  2. OUTFIT: The character MUST be wearing a Black Academic Graduation Gown (Beca) and a Mortarboard Cap (Capelo).
-  3. ACCESSORIES: Holding a rolled diploma.
-  4. THEME: Add a sash or details in colors representing the course: ${courseName}.
-  
-  ${stylePrompt}
-  ${framingPrompt}
-  
-  Background: Elegant studio lighting, celebratory atmosphere, blurred bokeh.
-  Expression: Proud, smiling, triumphant.
-  Quality: 8k, masterpiece, highly detailed.`;
+  const backgroundPrompt = {
+    [BackgroundOption.Studio]: "Professional photography studio with soft gradient background, subtle bokeh effect.",
+    [BackgroundOption.Campus]: "University campus background, blurred architecture, academic atmosphere.",
+    [BackgroundOption.Festive]: "Graduation-themed background with golden confetti, celebration lights."
+  }[background];
+
+  return `Create a professional graduation caricature portrait based on the attached image.
+
+## CRITICAL RULES:
+1. PRESERVE FACIAL IDENTITY: The character MUST look like the person in the image (same hair, skin tone, glasses, facial hair, face shape).
+2. ACADEMIC ACCURACY: Wear Black Academic Graduation Gown (Beca) and Mortarboard Cap (Capelo).
+3. COURSE THEME: Add sash/details in colors representing: ${courseName}.
+
+## ART STYLE:
+${stylePrompt}
+
+## COMPOSITION:
+${framingPrompt}
+
+## BACKGROUND:
+${backgroundPrompt}
+
+Technical: 8k resolution, sharp focus, masterpiece.`;
 };
 
 // Helper to handle Gemini Content Generation (Multimodal)
@@ -65,7 +73,7 @@ async function generateWithGemini(ai: GoogleGenAI, prompt: string, imageBase64: 
 async function generateWithImagen(ai: GoogleGenAI, prompt: string, aspectRatio: string) {
   const response = await ai.models.generateImages({
     model: 'imagen-3.0-generate-001',
-    prompt: prompt + " The character is a generic happy graduate student.",
+    prompt: prompt,
     config: {
       numberOfImages: 1,
       aspectRatio: aspectRatio,
@@ -85,13 +93,12 @@ export const generateCaricature = async (
   config: UserConfig
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey });
-  // Ensure strict cleaning of base64
   const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
   const aspectRatio = config.framing === Framing.FullBody ? "9:16" : "1:1";
   const prompt = buildPrompt(config);
 
   try {
-    // 1. Try Gemini 2.0 Flash (Multimodal - keeps facial identity better)
+    // 1. Try Gemini 2.0 Flash (Multimodal)
     console.log("Attempting generation with Gemini 2.0...");
     return await generateWithGemini(ai, prompt, cleanBase64, aspectRatio);
 
@@ -103,8 +110,7 @@ export const generateCaricature = async (
         console.log("Attempting fallback with Imagen 3.0...");
         return await generateWithImagen(ai, prompt, aspectRatio);
       } catch (imagenError: any) {
-        console.error("Imagen fallback failed:", imagenError);
-        throw new Error("⚠️ Alto Tráfego: Os servidores do Google estão ocupados. Aguarde 1 minuto.");
+        throw new Error("⚠️ Alto Tráfego: Os servidores do Google estão ocupados.");
       }
     }
     

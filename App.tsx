@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArtStyle, Framing, UserConfig, LoadingState } from './types';
+import { ArtStyle, Framing, BackgroundOption, UserConfig, LoadingState } from './types';
 import { generateCaricature } from './services/geminiService';
 import { generateOpenAICaricature } from './services/openaiService';
 import ImageUploader from './components/ImageUploader';
@@ -18,6 +18,7 @@ const App: React.FC = () => {
     courseName: '',
     style: ArtStyle.ThreeD,
     framing: Framing.Portrait,
+    background: BackgroundOption.Festive,
   });
   
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
