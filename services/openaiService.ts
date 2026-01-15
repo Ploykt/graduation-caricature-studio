@@ -12,11 +12,15 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
       model: "gpt-4o",
       messages: [
         {
+          role: "system",
+          content: "You are an expert character designer for animation. Your task is to extract visual attributes from a reference photo to create a stylized avatar. Focus purely on physical traits. Do not attempt to identify the person."
+        },
+        {
           role: "user",
           content: [
             { 
               type: "text", 
-              text: "Describe the person in this image concisely but with key details for a caricature artist. Focus on: hair style/color, skin tone, facial hair, glasses, approximate age, gender, and distinctive facial features. Do not describe the background or clothes. Just the physical appearance." 
+              text: "Analyze the visual features of the character in this image for an artistic caricature. Describe the following concisely: \n1. Hair (style, color, length)\n2. Skin tone and complexion\n3. Facial hair (beard/mustache) if any\n4. Glasses (if any)\n5. Gender and approximate age group\n6. Key facial structure (e.g., round face, sharp jawline)\n\nKeep it objective and descriptive for an artist." 
             },
             {
               type: "image_url",
@@ -27,13 +31,25 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
           ]
         }
       ],
-      max_tokens: 150
+      max_tokens: 200
     })
   });
 
   const data = await response.json();
+  
   if (data.error) throw new Error(`OpenAI Vision Error: ${data.error.message}`);
-  return data.choices[0].message.content;
+  
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("A IA não retornou nenhuma descrição.");
+
+  // Check for privacy refusal
+  const refusalKeywords = ["I'm sorry", "I cannot", "I can't", "identify", "privacy"];
+  if (refusalKeywords.some(keyword => content.startsWith(keyword))) {
+    console.warn("Vision Refusal:", content);
+    throw new Error("PRIVACY_REFUSAL");
+  }
+
+  return content;
 }
 
 // Helper to generate image with DALL-E 3
@@ -48,9 +64,9 @@ async function generateWithDalle3(apiKey: string, prompt: string, size: string):
       model: "dall-e-3",
       prompt: prompt,
       n: 1,
-      size: size, // "1024x1024" or "1024x1792"
+      size: size, 
       response_format: "b64_json",
-      quality: "standard" // or "hd"
+      quality: "standard"
     })
   });
 
@@ -67,32 +83,42 @@ export const generateOpenAICaricature = async (
   const { style, framing, courseName } = config;
 
   // 1. Analyze the face
-  // Note: DALL-E 3 doesn't support image-to-image directly for preserving identity in the same way.
-  // We use GPT-4o to "see" the person and describe them to DALL-E.
   console.log("Analyzing image with GPT-4o...");
-  const physicalDescription = await analyzeImageWithGPT4o(apiKey, imageBase64);
-  console.log("Analysis:", physicalDescription);
+  let physicalDescription = "";
+  
+  try {
+    physicalDescription = await analyzeImageWithGPT4o(apiKey, imageBase64);
+    console.log("Analysis:", physicalDescription);
+  } catch (error: any) {
+    if (error.message === "PRIVACY_REFUSAL") {
+      throw new Error("A IA de visão recusou analisar esta foto por motivos de privacidade. Tente uma foto diferente ou menos realista.");
+    }
+    throw error;
+  }
 
   // 2. Build the Prompt
   const stylePrompt = style === ArtStyle.ThreeD
-    ? `Style: 3D Pixar-style animation render, cute, vibrant, volumetric lighting.`
-    : `Style: High-quality 2D digital illustration, smooth shading, semi-realistic caricature art.`;
+    ? `Style: 3D Pixar-style animation render, cute, vibrant, volumetric lighting, 3d render engine.`
+    : `Style: High-quality 2D digital illustration, smooth shading, semi-realistic caricature art, digital painting.`;
 
-  const finalPrompt = `A professional graduation caricature of ${physicalDescription}.
+  const finalPrompt = `Create a professional graduation caricature based on this description: ${physicalDescription}.
   
-  CONTEXT & OUTFIT:
-  - The character is wearing a black graduation gown (beca) and a mortarboard cap (capelo).
-  - Holding a diploma with a ribbon.
-  - Theme/Sash color based on the course: ${courseName}.
-  - Background: Abstract festive studio background with bokeh.
+  IMPORTANT OUTFIT & THEME:
+  - The character is wearing a black graduation gown (beca).
+  - Wearing a mortarboard cap (capelo) on the head.
+  - Holding a rolled diploma with a ribbon.
+  - Theme/Sash color highlights: ${courseName} theme colors.
   
-  ARTISTIC STYLE:
+  SETTING:
+  - Background: Festive abstract bokeh studio lighting.
+  
+  ART DIRECTION:
   - ${stylePrompt}
-  - Expression: Happy, proud, celebrating.
-  - High detail, 8k resolution.`;
+  - Expression: Happy, smiling, proud.
+  - Resemblance: Try to match the description traits (hair, skin, glasses) as closely as possible.
+  - Quality: 8k resolution, masterpiece.`;
 
-  // 3. Determine Size based on Framing
-  // DALL-E 3 supports 1024x1024 (Square) or 1024x1792 (Portrait/Vertical)
+  // 3. Determine Size
   const size = framing === Framing.FullBody ? "1024x1792" : "1024x1024";
 
   // 4. Generate
