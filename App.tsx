@@ -81,7 +81,9 @@ const App: React.FC = () => {
       
       const msg = error.message || "";
       
-      if (msg === 'INVALID_KEY' || msg.includes('401')) {
+      if (msg === 'PRIVACY_REFUSAL') {
+        setErrorMsg("⚠️ Bloqueio de Privacidade: A IA não conseguiu analisar esta foto específica. Tente uma foto diferente (sem óculos escuros, boa iluminação) para evitar gastar seus créditos.");
+      } else if (msg === 'INVALID_KEY' || msg.includes('401')) {
         setErrorMsg("Chave de API inválida ou expirada.");
         setShowKeyModal(true);
       } else if (msg.includes('429') || msg.includes('billing')) {
