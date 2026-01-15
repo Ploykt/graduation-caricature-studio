@@ -26,9 +26,11 @@ const App: React.FC = () => {
   const [providerName, setProviderName] = useState<string>('');
 
   useEffect(() => {
-    // 1. Check Env
-    if (process.env.API_KEY) {
-      setApiKey(process.env.API_KEY);
+    // 1. Check Env (Prioritize OpenAI specific key, then generic key)
+    const envKey = process.env.OPENAI_API_KEY || process.env.API_KEY;
+    
+    if (envKey) {
+      setApiKey(envKey);
       return;
     }
 
