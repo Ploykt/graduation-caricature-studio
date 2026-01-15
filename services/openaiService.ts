@@ -13,23 +13,22 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
       messages: [
         {
           role: "system",
-          content: "You are a 3D Character Artist specialized in facial geometry."
+          content: "You are an illustration assistant."
         },
         {
           role: "user",
           content: [
             { 
               type: "text", 
-              text: `Analyze the visual data of this face to create a 3D avatar. 
-              List the following geometric attributes strictly:
-              1. Face Geometry (Jaw shape, chin width, cheekbone height)
-              2. Skin Texture Data (Approximate tone hex code or description)
-              3. Ocular Features (Eye shape, eyebrow thickness/arch, eye color)
-              4. Hair Mesh (Style volume, texture type, color value)
-              5. Accessories (Glasses geometry if present)
-              6. Facial Hair (Beard/stubble density)
-              
-              Output purely technical visual descriptions. Do NOT discuss identity.` 
+              text: `Create a text description for a stylized cartoon caricature inspired by the uploaded image.
+
+Important rules:
+- Do NOT identify or analyze the real person
+- Do NOT guess identity, age, ethnicity, or personal traits
+- Use the image ONLY as a loose visual reference for artistic inspiration
+- This is a fictional illustration description, not a real person analysis
+
+Please describe the key visual features (Hair style/color, Glasses, Facial hair, Expression, etc) so an artist can recreate the vibe of this character.` 
             },
             {
               type: "image_url",
@@ -96,7 +95,6 @@ export const generateOpenAICaricature = async (
   // 1. Analyze the face
   console.log("Analyzing image with GPT-4o...");
   
-  // REMOVED TRY/CATCH FALLBACK. 
   // If this fails, the code STOPS here and does NOT call DALL-E.
   const physicalDescription = await analyzeImageWithGPT4o(apiKey, imageBase64);
   
@@ -120,7 +118,7 @@ export const generateOpenAICaricature = async (
   // 3. Construct Final Prompt
   const finalPrompt = `Create a Graduation Caricature.
   
-  CHARACTER VISUALS (Strictly based on data):
+  CHARACTER VISUALS (Inspired by reference):
   ${physicalDescription}
   
   OUTFIT:
