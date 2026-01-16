@@ -14,11 +14,17 @@ export enum BackgroundOption {
   Festive = 'FESTIVE',
 }
 
+export enum AiProvider {
+  Gemini = 'GEMINI',
+  OpenAI = 'OPENAI',
+}
+
 export interface UserConfig {
   courseName: string;
   style: ArtStyle;
   framing: Framing;
   background: BackgroundOption;
+  provider: AiProvider;
 }
 
 export interface GeneratedResult {

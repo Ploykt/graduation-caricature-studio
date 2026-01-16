@@ -52,8 +52,9 @@ const buildPrompt = (config: UserConfig): string => {
 
 // Helper to handle Gemini Content Generation (Multimodal)
 async function generateWithGemini(ai: GoogleGenAI, prompt: string, imageBase64: string, aspectRatio: string) {
+  // Use gemini-3-pro-image-preview for high-quality image generation/editing tasks
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash-exp', 
+    model: 'gemini-3-pro-image-preview', 
     contents: {
       parts: [
         { text: prompt },
@@ -66,7 +67,10 @@ async function generateWithGemini(ai: GoogleGenAI, prompt: string, imageBase64: 
       ]
     },
     config: {
-      imageConfig: { aspectRatio: aspectRatio }
+      imageConfig: { 
+        aspectRatio: aspectRatio,
+        imageSize: "1K" // Supported by gemini-3-pro-image-preview
+      }
     }
   });
 
@@ -84,8 +88,9 @@ async function generateWithGemini(ai: GoogleGenAI, prompt: string, imageBase64: 
 
 // Helper to handle Imagen Generation (Fallback)
 async function generateWithImagen(ai: GoogleGenAI, prompt: string, aspectRatio: string) {
+  // Use imagen-4.0-generate-001 as per guidelines
   const response = await ai.models.generateImages({
-    model: 'imagen-3.0-generate-001',
+    model: 'imagen-4.0-generate-001',
     prompt: prompt,
     config: {
       numberOfImages: 1,
@@ -101,26 +106,26 @@ async function generateWithImagen(ai: GoogleGenAI, prompt: string, aspectRatio: 
 }
 
 export const generateCaricature = async (
-  apiKey: string,
   imageBase64: string,
   config: UserConfig
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey });
+  // API key must be obtained exclusively from process.env.API_KEY
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
   const aspectRatio = config.framing === Framing.FullBody ? "9:16" : "1:1";
   const prompt = buildPrompt(config);
 
   try {
-    // 1. Try Gemini 2.0 Flash (Multimodal)
-    console.log("Attempting generation with Gemini 2.0...");
+    // 1. Try Gemini 3 Pro (Multimodal)
+    console.log("Attempting generation with Gemini 3 Pro...");
     return await generateWithGemini(ai, prompt, cleanBase64, aspectRatio);
 
   } catch (error: any) {
-    console.warn("Gemini 2.0 failed, trying fallback...", error.message);
+    console.warn("Gemini 3 Pro failed, trying fallback...", error.message);
 
     if (error.status === 429 || error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
       try {
-        console.log("Attempting fallback with Imagen 3.0...");
+        console.log("Attempting fallback with Imagen 4.0...");
         return await generateWithImagen(ai, prompt, aspectRatio);
       } catch (imagenError: any) {
         throw new Error("⚠️ Alto Tráfego: Os servidores do Google estão ocupados.");

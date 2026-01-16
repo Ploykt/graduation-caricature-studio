@@ -1,55 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { ArtStyle, Framing, BackgroundOption, UserConfig, LoadingState } from './types';
+import React, { useState } from 'react';
+import { ArtStyle, Framing, BackgroundOption, UserConfig, LoadingState, AiProvider } from './types';
 import { generateCaricature } from './services/geminiService';
 import { generateOpenAICaricature } from './services/openaiService';
 import ImageUploader from './components/ImageUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ResultDisplay from './components/ResultDisplay';
 import LoadingOverlay from './components/LoadingOverlay';
-import ApiKeyModal from './components/ApiKeyModal';
 import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Cpu } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [apiKey, setApiKey] = useState<string>('');
-  const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
+  // API Keys are now obtained exclusively from process.env.API_KEY / process.env.OPENAI_API_KEY
+  // No UI for key management is allowed.
   
   const [image, setImage] = useState<string | null>(null);
+  
+  // Default to Gemini (Better likeness)
   const [config, setConfig] = useState<UserConfig>({
     courseName: '',
     style: ArtStyle.ThreeD,
     framing: Framing.Portrait,
     background: BackgroundOption.Festive,
+    provider: AiProvider.Gemini 
   });
   
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [providerName, setProviderName] = useState<string>('');
-
-  useEffect(() => {
-    // 1. Check Env (Prioritize OpenAI specific key, then generic key)
-    const envKey = process.env.OPENAI_API_KEY || process.env.API_KEY;
-    
-    if (envKey) {
-      setApiKey(envKey);
-      return;
-    }
-
-    // 2. Check Local Storage
-    const storedKey = localStorage.getItem('gemini_api_key');
-    if (storedKey) {
-      setApiKey(storedKey);
-    } else {
-      setShowKeyModal(true);
-    }
-  }, []);
-
-  const handleSaveKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem('gemini_api_key', key);
-    setShowKeyModal(false);
-    if (errorMsg === "INVALID_KEY") setErrorMsg(null);
-  };
 
   const handleGenerate = async () => {
     if (!image) return;
@@ -64,13 +41,19 @@ const App: React.FC = () => {
     try {
       let generatedBase64;
       
-      // Auto-detect provider based on Key format
-      if (apiKey.startsWith('sk-')) {
+      if (config.provider === AiProvider.OpenAI) {
+        if (!process.env.OPENAI_API_KEY) {
+          throw new Error("Chave da OpenAI não configurada nas variáveis de ambiente.");
+        }
         setProviderName('OpenAI (DALL-E 3)');
-        generatedBase64 = await generateOpenAICaricature(apiKey, image, config);
+        generatedBase64 = await generateOpenAICaricature(process.env.OPENAI_API_KEY, image, config);
       } else {
+        if (!process.env.API_KEY) {
+          throw new Error("Chave do Google Gemini não configurada nas variáveis de ambiente.");
+        }
         setProviderName('Google Gemini');
-        generatedBase64 = await generateCaricature(apiKey, image, config);
+        // generateCaricature now uses process.env.API_KEY internally
+        generatedBase64 = await generateCaricature(image, config);
       }
 
       setResultImage(generatedBase64);
@@ -82,12 +65,11 @@ const App: React.FC = () => {
       const msg = error.message || "";
       
       if (msg === 'PRIVACY_REFUSAL') {
-        setErrorMsg("⚠️ Bloqueio de Privacidade: A IA não conseguiu analisar esta foto específica. Tente uma foto diferente (sem óculos escuros, boa iluminação) para evitar gastar seus créditos.");
+        setErrorMsg("⚠️ Bloqueio de Privacidade (OpenAI): Tente usar o modelo 'Google Gemini' no painel, ele costuma ser mais flexível com fotos de pessoas.");
       } else if (msg === 'INVALID_KEY' || msg.includes('401')) {
-        setErrorMsg("Chave de API inválida ou expirada.");
-        setShowKeyModal(true);
-      } else if (msg.includes('429') || msg.includes('billing')) {
-         setErrorMsg("Erro de Cota/Faturamento: Verifique seus créditos na plataforma da IA.");
+        setErrorMsg("Chave de API inválida ou expirada. Verifique as configurações de ambiente.");
+      } else if (msg.includes('429') || msg.includes('billing') || msg.includes('RESOURCE_EXHAUSTED')) {
+         setErrorMsg("Erro de Cota: Você atingiu o limite de uso.");
       } else {
         setErrorMsg(msg || "Algo deu errado. Por favor, tente novamente.");
       }
@@ -105,8 +87,6 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center py-10 px-4 md:px-8">
       
-      {showKeyModal && <ApiKeyModal onSave={handleSaveKey} />}
-
       {/* Header Premium */}
       <header className="mb-12 text-center space-y-4 max-w-2xl mx-auto">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold-500/10 border border-gold-500/20 text-gold-400 text-sm font-semibold tracking-wide uppercase">
@@ -150,7 +130,7 @@ const App: React.FC = () => {
           
           {/* Error Banner */}
           {errorMsg && (
-            <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/50 text-red-200 flex items-center gap-3 animate-in slide-in-from-top-2">
+            <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/50 text-red-200 flex flex-col md:flex-row items-center gap-3 animate-in slide-in-from-top-2">
               <AlertCircle className="flex-shrink-0" />
               <p className="text-sm font-medium">{errorMsg}</p>
             </div>
@@ -201,9 +181,6 @@ const App: React.FC = () => {
                     </>
                   )}
                 </button>
-                <p className="text-center text-xs text-slate-500 mt-3">
-                  A IA detectará automaticamente qual chave você está usando.
-                </p>
               </div>
             </div>
           </div>
@@ -211,13 +188,10 @@ const App: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <footer className="mt-24 text-center space-y-2 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl">
-        <p className="text-slate-500 text-sm">
-          Graduation Studio AI &copy; 2024. 
-        </p>
-        <p className="text-slate-600 text-xs">
-          Suporta chaves Google AI Studio & OpenAI.
-        </p>
+      <footer className="mt-24 text-center space-y-4 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl">
+        <div className="flex justify-center gap-4 text-sm text-slate-500">
+           <p>Graduation Studio AI &copy; 2024</p>
+        </div>
       </footer>
     </div>
   );

@@ -13,22 +13,30 @@ async function analyzeImageWithGPT4o(apiKey: string, imageBase64: string): Promi
       messages: [
         {
           role: "system",
-          content: "You are an illustration assistant."
+          content: "You are an illustration assistant. Your goal is to help artists create fictional characters based on visual references."
         },
         {
           role: "user",
           content: [
             { 
               type: "text", 
-              text: `Create a text description for a stylized cartoon caricature inspired by the uploaded image.
+              text: `Create a stylized cartoon caricature description inspired by the uploaded image.
 
 Important rules:
-- Do NOT identify or analyze the real person
-- Do NOT guess identity, age, ethnicity, or personal traits
-- Use the image ONLY as a loose visual reference for artistic inspiration
-- This is a fictional illustration description, not a real person analysis
+- Do NOT identify or analyze the real person.
+- Do NOT guess identity, age, ethnicity, or personal traits.
+- Use the image ONLY as a loose visual reference for artistic inspiration.
+- This is a fictional illustration description, not a real person analysis.
 
-Please describe the key visual features (Hair style/color, Glasses, Facial hair, Expression, etc) so an artist can recreate the vibe of this character.` 
+OUTPUT FORMAT (Character Design Sheet):
+Please list the VISUAL TRAITS for the artist to draw:
+1. Hair (Style, texture, color - be specific)
+2. Facial Hair (Beard, mustache, stubble - crucial if present)
+3. Glasses (Yes/No - describe shape if yes)
+4. Face Shape & Features (Round/Square, specific nose/eye shape)
+5. Skin Tone Description (e.g., 'Warm olive', 'Deep brown', 'Fair')
+
+Keep it descriptive but purely visual.` 
             },
             {
               type: "image_url",
@@ -55,7 +63,6 @@ Please describe the key visual features (Hair style/color, Glasses, Facial hair,
   const refusalKeywords = ["I'm sorry", "I cannot", "I can't", "identify", "privacy", "unable to", "assist with this request", "policy"];
   if (refusalKeywords.some(keyword => content.toLowerCase().startsWith(keyword.toLowerCase()))) {
     console.warn("Vision Refusal detected:", content);
-    // CRITICAL: Throw distinct error to stop DALL-E generation
     throw new Error("PRIVACY_REFUSAL");
   }
 
@@ -94,45 +101,45 @@ export const generateOpenAICaricature = async (
 
   // 1. Analyze the face
   console.log("Analyzing image with GPT-4o...");
-  
-  // If this fails, the code STOPS here and does NOT call DALL-E.
   const physicalDescription = await analyzeImageWithGPT4o(apiKey, imageBase64);
-  
   console.log("Analysis Result:", physicalDescription);
 
-  // 2. Map Configuration to Prompts
-  const stylePrompt = style === ArtStyle.ThreeD
-    ? `3D Pixar Animation Style. Rendered in Octane, volumetric lighting, smooth cute features, vibrant colors.`
-    : `Digital Oil Painting Style. Impasto brush strokes, artistic lighting, masterpiece.`;
+  // 2. Style Definitions (Aggressive Differentiation)
+  // Put style AT THE START of the prompt to ensure DALL-E adheres to it.
+  const styleKeywords = style === ArtStyle.ThreeD
+    ? "STYLE: 3D DISNEY/PIXAR ANIMATION STYLE. High-end CGI, Octane Render, Cute 3D character, smooth plastic/clay textures, volumetric studio lighting, 3D mesh."
+    : "STYLE: 2D FLAT DIGITAL ILLUSTRATION. Vector art, clean thick outlines, flat vibrant colors, cel shading, hand-drawn look, NO 3D effects, 2D cartoon.";
 
-  const framingPrompt = framing === Framing.FullBody
-    ? `Full Body Shot. Showing the character standing from head to toe.`
-    : `Portrait Shot. Close-up on face and shoulders.`;
+  const framingKeywords = framing === Framing.FullBody
+    ? "Full Body shot (Head to toe, visible shoes)"
+    : "Portrait shot (Head and Shoulders only)";
 
-  const backgroundPrompt = {
-    [BackgroundOption.Studio]: "Professional studio backdrop, soft lighting.",
-    [BackgroundOption.Campus]: "University campus background, academic vibe.",
-    [BackgroundOption.Festive]: "Celebration background, confetti, gold bokeh."
+  const bgDescription = {
+    [BackgroundOption.Studio]: "Simple dark studio background with rim lighting.",
+    [BackgroundOption.Campus]: "Blurred university campus background.",
+    [BackgroundOption.Festive]: "Festive party background with gold bokeh and confetti."
   }[background];
 
   // 3. Construct Final Prompt
-  const finalPrompt = `Create a Graduation Caricature.
+  // We explicitly tell DALL-E to use the description from Step 1
+  const finalPrompt = `
+  ${styleKeywords}
   
-  CHARACTER VISUALS (Inspired by reference):
+  SUBJECT CHARACTER (Must match these traits):
   ${physicalDescription}
   
-  OUTFIT:
-  - Black Graduation Gown (Beca).
-  - Mortarboard Cap (Capelo).
-  - Sash/Stole representing: ${courseName}.
-  - Holding Diploma.
-  
-  STYLE & SETTING:
-  - ${stylePrompt}
-  - ${framingPrompt}
-  - ${backgroundPrompt}
-  - Expression: Proud and happy.
-  - Quality: 8k resolution.`;
+  OUTFIT (Mandatory):
+  - Black Graduation Gown (Beca) with wide sleeves.
+  - Graduation Cap (Mortarboard) on head.
+  - Sash/Stole with colors for ${courseName} course.
+  - Holding a diploma.
+
+  COMPOSITION:
+  - ${framingKeywords}
+  - ${bgDescription}
+  - Expression: Big happy smile, proud.
+  - High quality 8k image.
+  `;
 
   // 4. Determine Size
   const size = framing === Framing.FullBody ? "1024x1792" : "1024x1024";

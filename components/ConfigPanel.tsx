@@ -1,6 +1,6 @@
 import React from 'react';
-import { UserConfig, ArtStyle, Framing, BackgroundOption } from '../types';
-import { GraduationCap, Palette, Frame, User, BookOpen, Image as ImageIcon } from 'lucide-react';
+import { UserConfig, ArtStyle, Framing, BackgroundOption, AiProvider } from '../types';
+import { GraduationCap, Palette, Frame, User, BookOpen, ImageIcon, Cpu, Sparkles } from 'lucide-react';
 
 interface ConfigPanelProps {
   config: UserConfig;
@@ -15,6 +15,48 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onChange, disabled })
 
   return (
     <div className="space-y-6">
+      
+      {/* AI Model Provider Selection */}
+      <div className="space-y-3 pb-4 border-b border-white/5">
+        <label className="flex items-center gap-2 text-gold-400 font-bold text-sm uppercase tracking-wider">
+          <Cpu size={16} />
+          <span>Motor de Inteligência Artificial</span>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => updateConfig('provider', AiProvider.Gemini)}
+            disabled={disabled}
+            className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all relative overflow-hidden ${
+              config.provider === AiProvider.Gemini
+                ? 'bg-blue-600/20 border-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.15)]'
+                : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            <div className="flex items-center gap-2 relative z-10">
+              <Sparkles size={16} className={config.provider === AiProvider.Gemini ? "text-blue-400" : ""} />
+              <span className="font-semibold text-sm">Google Gemini</span>
+            </div>
+            <span className="text-[10px] opacity-70 relative z-10">Melhor Semelhança (Grátis)</span>
+          </button>
+
+          <button
+            onClick={() => updateConfig('provider', AiProvider.OpenAI)}
+            disabled={disabled}
+            className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all relative overflow-hidden ${
+              config.provider === AiProvider.OpenAI
+                ? 'bg-green-600/20 border-green-500 text-white shadow-[0_0_20px_rgba(22,163,74,0.15)]'
+                : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+             <div className="flex items-center gap-2 relative z-10">
+              <Cpu size={16} className={config.provider === AiProvider.OpenAI ? "text-green-400" : ""} />
+              <span className="font-semibold text-sm">OpenAI DALL-E 3</span>
+            </div>
+            <span className="text-[10px] opacity-70 relative z-10">Alta Criatividade (Pago)</span>
+          </button>
+        </div>
+      </div>
+
       {/* Course Name */}
       <div className="space-y-3">
         <label className="flex items-center gap-2 text-gold-400 font-bold text-sm uppercase tracking-wider">
