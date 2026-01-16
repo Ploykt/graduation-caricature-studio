@@ -52,9 +52,10 @@ const buildPrompt = (config: UserConfig): string => {
 
 // Helper to handle Gemini Content Generation (Multimodal)
 async function generateWithGemini(ai: GoogleGenAI, prompt: string, imageBase64: string, aspectRatio: string) {
-  // Use gemini-3-pro-image-preview for high-quality image generation/editing tasks
+  // Use gemini-2.5-flash-image for cost efficiency/free tier compatibility
+  // Note: 'imageSize' is NOT supported on 2.5-flash-image, only aspectRatio.
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-image-preview', 
+    model: 'gemini-2.5-flash-image', 
     contents: {
       parts: [
         { text: prompt },
@@ -68,8 +69,7 @@ async function generateWithGemini(ai: GoogleGenAI, prompt: string, imageBase64: 
     },
     config: {
       imageConfig: { 
-        aspectRatio: aspectRatio,
-        imageSize: "1K" // Supported by gemini-3-pro-image-preview
+        aspectRatio: aspectRatio
       }
     }
   });
@@ -116,12 +116,12 @@ export const generateCaricature = async (
   const prompt = buildPrompt(config);
 
   try {
-    // 1. Try Gemini 3 Pro (Multimodal)
-    console.log("Attempting generation with Gemini 3 Pro...");
+    // 1. Try Gemini 2.5 Flash Image (Fast/Free Tier Friendly)
+    console.log("Attempting generation with Gemini 2.5 Flash Image...");
     return await generateWithGemini(ai, prompt, cleanBase64, aspectRatio);
 
   } catch (error: any) {
-    console.warn("Gemini 3 Pro failed, trying fallback...", error.message);
+    console.warn("Gemini 2.5 Flash failed, trying fallback...", error.message);
 
     if (error.status === 429 || error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
       try {

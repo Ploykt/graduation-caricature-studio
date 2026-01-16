@@ -1,13 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArtStyle, Framing, BackgroundOption, UserConfig, LoadingState } from './types';
 import { generateCaricature } from './services/geminiService';
 import ImageUploader from './components/ImageUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ResultDisplay from './components/ResultDisplay';
 import LoadingOverlay from './components/LoadingOverlay';
-import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
+import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Sparkles, KeyRound } from 'lucide-react';
 
 const App: React.FC = () => {
+  // --- API KEY GATE STATE ---
+  const [hasAccess, setHasAccess] = useState<boolean>(false);
+  const [isCheckingAccess, setIsCheckingAccess] = useState<boolean>(true);
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      try {
+        if ((window as any).aistudio) {
+          const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+          setHasAccess(hasKey);
+        } else if (process.env.API_KEY) {
+          // Fallback para desenvolvimento local fora do ambiente AI Studio
+          setHasAccess(true);
+        }
+      } catch (error) {
+        console.error("Erro ao verificar API Key:", error);
+      } finally {
+        setIsCheckingAccess(false);
+      }
+    };
+    checkAccess();
+  }, []);
+
+  const requestAccess = async () => {
+    if ((window as any).aistudio) {
+      try {
+        await (window as any).aistudio.openSelectKey();
+        // Assume sucesso após retorno da promise, conforme docs
+        setHasAccess(true);
+      } catch (e) {
+        console.error("Seleção de chave cancelada ou falhou", e);
+        // Não reseta hasAccess para false se já estava true, para não bloquear o usuário se ele cancelar a troca
+      }
+    } else {
+      alert("Ambiente Google AI Studio não detectado. Configure a variável de ambiente API_KEY localmente.");
+    }
+  };
+
+  // --- APP STATE ---
   const [image, setImage] = useState<string | null>(null);
   
   const [config, setConfig] = useState<UserConfig>({
@@ -32,11 +71,7 @@ const App: React.FC = () => {
     setErrorMsg(null);
 
     try {
-      if (!process.env.API_KEY) {
-        throw new Error("Chave do Google Gemini não configurada nas variáveis de ambiente.");
-      }
-
-      // Strictly use Gemini via process.env.API_KEY
+      // Cria nova instância a cada chamada para garantir que pegue a chave mais recente selecionada
       const generatedBase64 = await generateCaricature(image, config);
 
       setResultImage(generatedBase64);
@@ -47,10 +82,11 @@ const App: React.FC = () => {
       
       const msg = error.message || "";
       
-      if (msg === 'INVALID_KEY' || msg.includes('401') || msg.includes('403')) {
-        setErrorMsg("Chave de API inválida ou expirada. Verifique as variáveis de ambiente.");
+      if (msg === 'INVALID_KEY' || msg.includes('401') || msg.includes('403') || msg.includes('Requested entity was not found')) {
+        setErrorMsg("Chave de API inválida ou não encontrada. Por favor, reconecte sua chave.");
+        setHasAccess(false); // Força a tela de login se a chave for inválida
       } else if (msg.includes('429') || msg.includes('billing') || msg.includes('RESOURCE_EXHAUSTED')) {
-         setErrorMsg("Erro de Cota: Limite atingido na API do Google Gemini.");
+         setErrorMsg("Erro de Cota/Créditos. Tente trocar para uma conta com nível gratuito.");
       } else {
         setErrorMsg(msg || "Algo deu errado. Por favor, tente novamente.");
       }
@@ -64,9 +100,77 @@ const App: React.FC = () => {
     setErrorMsg(null);
   };
 
+  // --- RENDER: LOADING CHECK ---
+  if (isCheckingAccess) {
+    return (
+      <div className="min-h-screen w-full bg-[#0B0F19] flex items-center justify-center">
+        <div className="animate-pulse flex flex-col items-center gap-4">
+           <GraduationCap className="w-12 h-12 text-slate-600" />
+           <p className="text-slate-500 font-medium">Verificando acesso ao estúdio...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDER: API KEY GATE (LANDING) ---
+  if (!hasAccess) {
+    return (
+      <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full glass-panel p-8 md:p-10 rounded-3xl text-center space-y-8 border border-gold-500/20 shadow-2xl shadow-black/50 relative overflow-hidden">
+          
+          {/* Background Glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-gold-500/10 blur-[60px] rounded-full pointer-events-none"></div>
+
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="bg-gradient-to-br from-slate-800 to-black p-5 rounded-2xl mb-6 border border-slate-700 shadow-lg group">
+              <GraduationCap className="w-10 h-10 text-gold-500 group-hover:scale-110 transition-transform duration-500" />
+            </div>
+            
+            <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">
+              Estúdio de Formatura
+            </h1>
+            <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
+              Conecte sua conta Google para gerar caricaturas incríveis. Use o nível gratuito ou seus créditos.
+            </p>
+          </div>
+          
+          <div className="space-y-4 relative z-10">
+            <button 
+              onClick={requestAccess}
+              className="w-full py-4 px-6 rounded-xl font-bold text-lg bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3"
+            >
+              <KeyRound size={20} />
+              <span>Conectar Google API</span>
+            </button>
+
+            <div className="text-[10px] text-slate-500 px-4 py-3 rounded-lg bg-slate-900/50 border border-slate-800">
+              <p>O modelo <strong>Flash 2.5</strong> é eficiente e compatível com contas de nível gratuito.</p>
+            </div>
+          </div>
+        </div>
+        
+        <p className="mt-8 text-slate-600 text-xs">Powered by Google Gemini AI</p>
+      </div>
+    );
+  }
+
+  // --- RENDER: MAIN APP ---
   return (
-    <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center py-10 px-4 md:px-8">
+    <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center py-10 px-4 md:px-8 animate-in fade-in duration-700">
       
+      {/* Top Bar with API Switcher */}
+      <div className="absolute top-4 right-4 md:top-8 md:right-8 z-50">
+         {(window as any).aistudio && (
+            <button 
+              onClick={requestAccess}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 hover:border-gold-500/50 text-xs font-semibold text-slate-300 hover:text-white transition-all backdrop-blur-md shadow-lg"
+            >
+              <KeyRound size={14} className="text-gold-500" />
+              <span>Trocar Conta Google</span>
+            </button>
+          )}
+      </div>
+
       {/* Header Premium */}
       <header className="mb-12 text-center space-y-4 max-w-2xl mx-auto">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold-500/10 border border-gold-500/20 text-gold-400 text-sm font-semibold tracking-wide uppercase">
@@ -80,11 +184,10 @@ const App: React.FC = () => {
         
         <p className="text-slate-400 text-lg">
           Transforme sua selfie em uma caricatura profissional de formatura digna de um quadro. 
-          Perfeito para convites, redes sociais e lembranças.
         </p>
 
         <div className="flex justify-center gap-4 text-xs text-slate-500 pt-2">
-          <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Alta Resolução (8K)</span>
+          <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Alta Resolução</span>
           <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Trajes Oficiais</span>
           <span className="flex items-center gap-1"><Sparkles size={12} className="text-blue-400"/> Powered by Google Gemini</span>
         </div>
@@ -113,6 +216,15 @@ const App: React.FC = () => {
             <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/50 text-red-200 flex flex-col md:flex-row items-center gap-3 animate-in slide-in-from-top-2">
               <AlertCircle className="flex-shrink-0" />
               <p className="text-sm font-medium">{errorMsg}</p>
+              {/* Botão de ação rápida no erro para trocar chave */}
+              {(errorMsg.includes('Chave') || errorMsg.includes('Cota')) && (window as any).aistudio && (
+                <button 
+                  onClick={requestAccess}
+                  className="ml-auto px-3 py-1 text-xs bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-lg border border-red-500/30 transition-colors whitespace-nowrap"
+                >
+                  Trocar Conta
+                </button>
+              )}
             </div>
           )}
         </div>
