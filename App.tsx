@@ -5,7 +5,7 @@ import ImageUploader from './components/ImageUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ResultDisplay from './components/ResultDisplay';
 import LoadingOverlay from './components/LoadingOverlay';
-import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Sparkles, KeyRound } from 'lucide-react';
+import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Sparkles, KeyRound, Settings } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- API KEY GATE STATE ---
@@ -37,12 +37,13 @@ const App: React.FC = () => {
         await (window as any).aistudio.openSelectKey();
         // Assume sucesso após retorno da promise, conforme docs
         setHasAccess(true);
+        // Recarrega a página para garantir que a nova chave seja usada limpa
+        window.location.reload();
       } catch (e) {
         console.error("Seleção de chave cancelada ou falhou", e);
-        // Não reseta hasAccess para false se já estava true, para não bloquear o usuário se ele cancelar a troca
       }
     } else {
-      alert("Ambiente Google AI Studio não detectado. Configure a variável de ambiente API_KEY localmente.");
+      alert("Ambiente Google AI Studio não detectado. Se estiver rodando localmente, configure a variável API_KEY.");
     }
   };
 
@@ -156,23 +157,22 @@ const App: React.FC = () => {
 
   // --- RENDER: MAIN APP ---
   return (
-    <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center py-10 px-4 md:px-8 animate-in fade-in duration-700">
+    <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center py-10 px-4 md:px-8 animate-in fade-in duration-700 relative">
       
-      {/* Top Bar with API Switcher */}
-      <div className="absolute top-4 right-4 md:top-8 md:right-8 z-50">
-         {(window as any).aistudio && (
-            <button 
-              onClick={requestAccess}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 hover:border-gold-500/50 text-xs font-semibold text-slate-300 hover:text-white transition-all backdrop-blur-md shadow-lg"
-            >
-              <KeyRound size={14} className="text-gold-500" />
-              <span>Trocar Conta Google</span>
-            </button>
-          )}
+      {/* 1. Botão Flutuante Superior Direito (Sempre visível) */}
+      <div className="absolute top-4 right-4 z-50">
+          <button 
+            onClick={requestAccess}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 hover:border-gold-500/50 text-xs font-semibold text-slate-300 hover:text-white transition-all backdrop-blur-md shadow-lg"
+          >
+            <KeyRound size={14} className="text-gold-500" />
+            <span className="hidden sm:inline">Alterar API Key</span>
+            <span className="sm:hidden">API</span>
+          </button>
       </div>
 
       {/* Header Premium */}
-      <header className="mb-12 text-center space-y-4 max-w-2xl mx-auto">
+      <header className="mb-12 text-center space-y-4 max-w-2xl mx-auto mt-8 md:mt-0">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold-500/10 border border-gold-500/20 text-gold-400 text-sm font-semibold tracking-wide uppercase">
           <GraduationCap size={16} />
           <span>Edição Especial Formandos</span>
@@ -217,7 +217,7 @@ const App: React.FC = () => {
               <AlertCircle className="flex-shrink-0" />
               <p className="text-sm font-medium">{errorMsg}</p>
               {/* Botão de ação rápida no erro para trocar chave */}
-              {(errorMsg.includes('Chave') || errorMsg.includes('Cota')) && (window as any).aistudio && (
+              {(errorMsg.includes('Chave') || errorMsg.includes('Cota')) && (
                 <button 
                   onClick={requestAccess}
                   className="ml-auto px-3 py-1 text-xs bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-lg border border-red-500/30 transition-colors whitespace-nowrap"
@@ -233,12 +233,25 @@ const App: React.FC = () => {
         {!resultImage && (
           <div className="lg:col-span-5 w-full order-2">
             <div className="glass-panel rounded-2xl p-6 md:p-8 space-y-8 sticky top-8">
-              <div className="space-y-1">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold-500 text-black text-xs font-bold">1</span>
-                  Personalize seu Estilo
-                </h2>
-                <p className="text-sm text-slate-400 pl-8">Defina como será sua arte final.</p>
+              
+              {/* Header do Painel */}
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold-500 text-black text-xs font-bold">1</span>
+                    Personalize seu Estilo
+                  </h2>
+                  <p className="text-sm text-slate-400 pl-8">Defina como será sua arte final.</p>
+                </div>
+                
+                {/* 2. Botão Secundário dentro do Painel (Sempre visível) */}
+                <button 
+                   onClick={requestAccess}
+                   className="p-2 text-slate-500 hover:text-gold-500 transition-colors rounded-lg hover:bg-white/5"
+                   title="Alterar Chave API Google"
+                >
+                  <Settings size={18} />
+                </button>
               </div>
 
               <ConfigPanel 
@@ -276,6 +289,9 @@ const App: React.FC = () => {
       <footer className="mt-24 text-center space-y-4 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl">
         <div className="flex justify-center gap-4 text-sm text-slate-500">
            <p>Graduation Studio AI &copy; 2024</p>
+           <button onClick={requestAccess} className="hover:text-gold-500 transition-colors underline decoration-slate-700 hover:decoration-gold-500">
+             Configurar Chave Google
+           </button>
         </div>
       </footer>
     </div>
