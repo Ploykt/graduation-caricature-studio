@@ -17,6 +17,7 @@ export enum BackgroundOption {
 export enum AiProvider {
   Gemini = 'GEMINI',
   OpenAI = 'OPENAI',
+  Hybrid = 'HYBRID', // New Hybrid Mode
 }
 
 export interface UserConfig {

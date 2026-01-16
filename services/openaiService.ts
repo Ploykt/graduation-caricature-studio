@@ -92,19 +92,11 @@ async function generateWithDalle3(apiKey: string, prompt: string, size: string):
   return `data:image/png;base64,${data.data[0].b64_json}`;
 }
 
-export const generateOpenAICaricature = async (
-  apiKey: string,
-  imageBase64: string,
-  config: UserConfig
-): Promise<string> => {
+// Internal helper to build DALL-E prompt
+function buildDallePrompt(physicalDescription: string, config: UserConfig): { prompt: string, size: string } {
   const { style, framing, courseName, background } = config;
 
-  // 1. Analyze the face
-  console.log("Analyzing image with GPT-4o...");
-  const physicalDescription = await analyzeImageWithGPT4o(apiKey, imageBase64);
-  console.log("Analysis Result:", physicalDescription);
-
-  // 2. Style Definitions (Aggressive Differentiation)
+  // Style Definitions (Aggressive Differentiation)
   // Put style AT THE START of the prompt to ensure DALL-E adheres to it.
   const styleKeywords = style === ArtStyle.ThreeD
     ? "STYLE: 3D DISNEY/PIXAR ANIMATION STYLE. High-end CGI, Octane Render, Cute 3D character, smooth plastic/clay textures, volumetric studio lighting, 3D mesh."
@@ -120,8 +112,6 @@ export const generateOpenAICaricature = async (
     [BackgroundOption.Festive]: "Festive party background with gold bokeh and confetti."
   }[background];
 
-  // 3. Construct Final Prompt
-  // We explicitly tell DALL-E to use the description from Step 1
   const finalPrompt = `
   ${styleKeywords}
   
@@ -141,10 +131,41 @@ export const generateOpenAICaricature = async (
   - High quality 8k image.
   `;
 
-  // 4. Determine Size
+  // Determine Size
   const size = framing === Framing.FullBody ? "1024x1792" : "1024x1024";
 
-  // 5. Generate
-  console.log("Generating with DALL-E 3...", finalPrompt);
-  return await generateWithDalle3(apiKey, finalPrompt, size);
+  return { prompt: finalPrompt, size };
+}
+
+
+// --- EXPORTS ---
+
+// 1. Full OpenAI Flow (GPT-4o -> DALL-E 3)
+export const generateOpenAICaricature = async (
+  apiKey: string,
+  imageBase64: string,
+  config: UserConfig
+): Promise<string> => {
+  // 1. Analyze the face
+  console.log("Analyzing image with GPT-4o...");
+  const physicalDescription = await analyzeImageWithGPT4o(apiKey, imageBase64);
+  console.log("Analysis Result:", physicalDescription);
+
+  // 2. Build Prompt
+  const { prompt, size } = buildDallePrompt(physicalDescription, config);
+
+  // 3. Generate
+  console.log("Generating with DALL-E 3...", prompt);
+  return await generateWithDalle3(apiKey, prompt, size);
+};
+
+// 2. DALL-E Generation from Description (For Hybrid Mode)
+export const generateDalleImageFromDescription = async (
+  apiKey: string,
+  description: string,
+  config: UserConfig
+): Promise<string> => {
+  const { prompt, size } = buildDallePrompt(description, config);
+  console.log("Generating with DALL-E 3 (Hybrid)...", prompt);
+  return await generateWithDalle3(apiKey, prompt, size);
 };

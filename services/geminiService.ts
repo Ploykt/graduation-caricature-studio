@@ -139,3 +139,42 @@ export const generateCaricature = async (
     throw new Error(error.message || "Falha na geração da imagem.");
   }
 };
+
+/**
+ * FEATURE FOR HYBRID MODE
+ * Uses Gemini 3 Flash (Fast/Cheap) to analyze facial features for DALL-E
+ */
+export const analyzeImageWithGemini = async (imageBase64: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+
+  const prompt = `
+  You are an expert visual assistant. 
+  Describe the physical appearance of the person in this image for a character designer.
+  
+  FOCUS ONLY ON VISUAL TRAITS:
+  1. Gender presentation
+  2. Estimated age range (e.g., "young adult")
+  3. Skin tone (be specific, e.g., "warm olive", "pale", "dark brown")
+  4. Hair style, texture, and color (e.g., "short curly black hair", "long straight blonde hair")
+  5. Facial hair (mustache, beard, stubble? - VERY IMPORTANT)
+  6. Glasses? (Shape and color)
+  7. Key facial features (eye shape, nose shape)
+  
+  Do not mention the person's name or identity. Just the visual description.
+  Output as a concise paragraph.
+  `;
+
+  // Use gemini-3-flash-preview for text analysis tasks (multimodal input)
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: {
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
+      ]
+    }
+  });
+
+  return response.text || "A young graduate with a happy expression.";
+};

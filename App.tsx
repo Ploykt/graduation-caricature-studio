@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArtStyle, Framing, BackgroundOption, UserConfig, LoadingState, AiProvider } from './types';
-import { generateCaricature } from './services/geminiService';
-import { generateOpenAICaricature } from './services/openaiService';
+import { generateCaricature, analyzeImageWithGemini } from './services/geminiService';
+import { generateOpenAICaricature, generateDalleImageFromDescription } from './services/openaiService';
 import ImageUploader from './components/ImageUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ResultDisplay from './components/ResultDisplay';
@@ -41,13 +41,34 @@ const App: React.FC = () => {
     try {
       let generatedBase64;
       
+      // --- OPENAI PURE ---
       if (config.provider === AiProvider.OpenAI) {
         if (!process.env.OPENAI_API_KEY) {
           throw new Error("Chave da OpenAI não configurada nas variáveis de ambiente.");
         }
         setProviderName('OpenAI (DALL-E 3)');
         generatedBase64 = await generateOpenAICaricature(process.env.OPENAI_API_KEY, image, config);
-      } else {
+      } 
+      
+      // --- HYBRID (GEMINI VISION + DALL-E) ---
+      else if (config.provider === AiProvider.Hybrid) {
+        if (!process.env.OPENAI_API_KEY || !process.env.API_KEY) {
+           throw new Error("Para o modo Híbrido, você precisa de AMBAS as chaves (Gemini e OpenAI) configuradas.");
+        }
+        
+        setProviderName('Híbrido (Gemini Vision + DALL-E)');
+        
+        // Step 1: Analyze with Gemini (Free/Cheap/Better Vision)
+        console.log("Iniciando modo híbrido: Análise Gemini...");
+        const description = await analyzeImageWithGemini(image);
+        console.log("Descrição Gemini:", description);
+
+        // Step 2: Generate with DALL-E 3
+        generatedBase64 = await generateDalleImageFromDescription(process.env.OPENAI_API_KEY, description, config);
+      }
+
+      // --- GEMINI PURE ---
+      else {
         if (!process.env.API_KEY) {
           throw new Error("Chave do Google Gemini não configurada nas variáveis de ambiente.");
         }
@@ -65,11 +86,11 @@ const App: React.FC = () => {
       const msg = error.message || "";
       
       if (msg === 'PRIVACY_REFUSAL') {
-        setErrorMsg("⚠️ Bloqueio de Privacidade (OpenAI): Tente usar o modelo 'Google Gemini' no painel, ele costuma ser mais flexível com fotos de pessoas.");
+        setErrorMsg("⚠️ Bloqueio de Privacidade (OpenAI): O DALL-E recusou gerar esta imagem. Tente usar o modelo 'Google Gemini' puro.");
       } else if (msg === 'INVALID_KEY' || msg.includes('401')) {
-        setErrorMsg("Chave de API inválida ou expirada. Verifique as configurações de ambiente.");
+        setErrorMsg("Chave de API inválida ou expirada. Verifique as variáveis de ambiente.");
       } else if (msg.includes('429') || msg.includes('billing') || msg.includes('RESOURCE_EXHAUSTED')) {
-         setErrorMsg("Erro de Cota: Você atingiu o limite de uso.");
+         setErrorMsg("Erro de Cota: Limite atingido na API selecionada.");
       } else {
         setErrorMsg(msg || "Algo deu errado. Por favor, tente novamente.");
       }
