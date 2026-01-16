@@ -5,22 +5,30 @@ import ImageUploader from './components/ImageUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ResultDisplay from './components/ResultDisplay';
 import LoadingOverlay from './components/LoadingOverlay';
-import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Sparkles, KeyRound, Settings } from 'lucide-react';
+import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Sparkles, KeyRound, Settings, FileCode, Terminal } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- API KEY GATE STATE ---
   const [hasAccess, setHasAccess] = useState<boolean>(false);
   const [isCheckingAccess, setIsCheckingAccess] = useState<boolean>(true);
+  const [isLocalhost, setIsLocalhost] = useState<boolean>(false);
 
   useEffect(() => {
     const checkAccess = async () => {
+      // Verifica se está rodando localmente
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      setIsLocalhost(isLocal);
+
       try {
         if ((window as any).aistudio) {
           const hasKey = await (window as any).aistudio.hasSelectedApiKey();
           setHasAccess(hasKey);
         } else if (process.env.API_KEY) {
-          // Fallback para desenvolvimento local fora do ambiente AI Studio
+          // Se tiver variável de ambiente, libera o acesso
           setHasAccess(true);
+        } else {
+          // Sem chave e sem AI Studio
+          setHasAccess(false);
         }
       } catch (error) {
         console.error("Erro ao verificar API Key:", error);
@@ -35,15 +43,14 @@ const App: React.FC = () => {
     if ((window as any).aistudio) {
       try {
         await (window as any).aistudio.openSelectKey();
-        // Assume sucesso após retorno da promise, conforme docs
         setHasAccess(true);
-        // Recarrega a página para garantir que a nova chave seja usada limpa
         window.location.reload();
       } catch (e) {
         console.error("Seleção de chave cancelada ou falhou", e);
       }
     } else {
-      alert("Ambiente Google AI Studio não detectado. Se estiver rodando localmente, configure a variável API_KEY.");
+      // Se clicou no botão mas não tem AI Studio (ambiente local sem .env)
+      alert("Ambiente Google AI Studio não detectado.\n\nPara usar sua nova chave:\n1. Crie um arquivo chamado .env na raiz do projeto.\n2. Adicione a linha: API_KEY=SuaChaveAqui\n3. Reinicie o projeto (npm run dev).");
     }
   };
 
@@ -83,11 +90,14 @@ const App: React.FC = () => {
       
       const msg = error.message || "";
       
-      if (msg === 'INVALID_KEY' || msg.includes('401') || msg.includes('403') || msg.includes('Requested entity was not found')) {
-        setErrorMsg("Chave de API inválida ou não encontrada. Por favor, reconecte sua chave.");
-        setHasAccess(false); // Força a tela de login se a chave for inválida
+      // Tratamento de erros comuns para orientar o usuário
+      if (msg === 'INVALID_KEY' || msg.includes('401') || msg.includes('403') || msg.includes('API key not valid')) {
+        setErrorMsg("Chave Inválida. Verifique se a 'Google Generative Language API' está ativada no seu projeto Google Cloud ou se copiou a chave corretamente.");
+        setHasAccess(false); 
+      } else if (msg.includes('404') || msg.includes('Not Found')) {
+         setErrorMsg("Modelo não encontrado ou API não ativada. Verifique se seu projeto Google Cloud tem acesso ao Gemini API.");
       } else if (msg.includes('429') || msg.includes('billing') || msg.includes('RESOURCE_EXHAUSTED')) {
-         setErrorMsg("Erro de Cota/Créditos. Tente trocar para uma conta com nível gratuito.");
+         setErrorMsg("Limite de requisições excedido (Erro 429). Aguarde alguns instantes ou troque de chave.");
       } else {
         setErrorMsg(msg || "Algo deu errado. Por favor, tente novamente.");
       }
@@ -115,11 +125,12 @@ const App: React.FC = () => {
 
   // --- RENDER: API KEY GATE (LANDING) ---
   if (!hasAccess) {
+    const showLocalInstructions = isLocalhost && !(window as any).aistudio;
+
     return (
       <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full glass-panel p-8 md:p-10 rounded-3xl text-center space-y-8 border border-gold-500/20 shadow-2xl shadow-black/50 relative overflow-hidden">
+        <div className="max-w-xl w-full glass-panel p-8 md:p-10 rounded-3xl text-center space-y-8 border border-gold-500/20 shadow-2xl shadow-black/50 relative overflow-hidden">
           
-          {/* Background Glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-gold-500/10 blur-[60px] rounded-full pointer-events-none"></div>
 
           <div className="relative z-10 flex flex-col items-center">
@@ -130,27 +141,51 @@ const App: React.FC = () => {
             <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">
               Estúdio de Formatura
             </h1>
-            <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
-              Conecte sua conta Google para gerar caricaturas incríveis. Use o nível gratuito ou seus créditos.
-            </p>
+            
+            {!showLocalInstructions ? (
+              <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
+                 Conecte sua conta Google para gerar caricaturas incríveis.
+              </p>
+            ) : (
+              <div className="text-left bg-slate-900/80 p-6 rounded-xl border border-slate-700 w-full animate-in fade-in slide-in-from-bottom-4">
+                 <h3 className="text-gold-400 font-bold flex items-center gap-2 mb-4">
+                   <Terminal size={18} />
+                   Configuração Necessária
+                 </h3>
+                 <p className="text-slate-300 text-sm mb-4">
+                   Você criou uma chave, mas o app não a encontrou. Para rodar localmente:
+                 </p>
+                 <ol className="text-xs text-slate-400 space-y-3 list-decimal pl-4">
+                   <li className="pl-1">Crie um arquivo chamado <code className="text-green-400 bg-black/50 px-1 py-0.5 rounded">.env</code> na pasta raiz do projeto.</li>
+                   <li className="pl-1">Abra o arquivo e cole sua chave assim:
+                     <div className="mt-2 bg-black/50 p-3 rounded-lg border border-slate-800 font-mono text-slate-300 flex items-center gap-2">
+                       <FileCode size={14} className="text-blue-400" />
+                       API_KEY=AIzaSy...
+                     </div>
+                   </li>
+                   <li className="pl-1">Pare o terminal e rode <code className="text-white">npm run dev</code> novamente.</li>
+                 </ol>
+              </div>
+            )}
           </div>
           
           <div className="space-y-4 relative z-10">
-            <button 
-              onClick={requestAccess}
-              className="w-full py-4 px-6 rounded-xl font-bold text-lg bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3"
-            >
-              <KeyRound size={20} />
-              <span>Conectar Google API</span>
-            </button>
+            {/* Se estiver no AI Studio, mostra botão do Google. Se estiver local sem chave, o botão é um fallback */}
+            {!showLocalInstructions && (
+              <button 
+                onClick={requestAccess}
+                className="w-full py-4 px-6 rounded-xl font-bold text-lg bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3"
+              >
+                <KeyRound size={20} />
+                <span>Conectar Google API</span>
+              </button>
+            )}
 
             <div className="text-[10px] text-slate-500 px-4 py-3 rounded-lg bg-slate-900/50 border border-slate-800">
-              <p>O modelo <strong>Flash 2.5</strong> é eficiente e compatível com contas de nível gratuito.</p>
+              <p>Dica: Certifique-se que a <strong>Generative Language API</strong> está ativada no seu projeto Google Cloud.</p>
             </div>
           </div>
         </div>
-        
-        <p className="mt-8 text-slate-600 text-xs">Powered by Google Gemini AI</p>
       </div>
     );
   }
@@ -161,14 +196,16 @@ const App: React.FC = () => {
       
       {/* 1. Botão Flutuante Superior Direito (Sempre visível) */}
       <div className="absolute top-4 right-4 z-50">
-          <button 
-            onClick={requestAccess}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 hover:border-gold-500/50 text-xs font-semibold text-slate-300 hover:text-white transition-all backdrop-blur-md shadow-lg"
-          >
-            <KeyRound size={14} className="text-gold-500" />
-            <span className="hidden sm:inline">Alterar API Key</span>
-            <span className="sm:hidden">API</span>
-          </button>
+          {(window as any).aistudio && (
+            <button 
+              onClick={requestAccess}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 hover:border-gold-500/50 text-xs font-semibold text-slate-300 hover:text-white transition-all backdrop-blur-md shadow-lg"
+            >
+              <KeyRound size={14} className="text-gold-500" />
+              <span className="hidden sm:inline">Alterar API Key</span>
+              <span className="sm:hidden">API</span>
+            </button>
+          )}
       </div>
 
       {/* Header Premium */}
@@ -213,14 +250,18 @@ const App: React.FC = () => {
           
           {/* Error Banner */}
           {errorMsg && (
-            <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/50 text-red-200 flex flex-col md:flex-row items-center gap-3 animate-in slide-in-from-top-2">
-              <AlertCircle className="flex-shrink-0" />
-              <p className="text-sm font-medium">{errorMsg}</p>
-              {/* Botão de ação rápida no erro para trocar chave */}
-              {(errorMsg.includes('Chave') || errorMsg.includes('Cota')) && (
+            <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/50 text-red-200 flex flex-col md:flex-row items-center gap-3 animate-in slide-in-from-top-2 border-l-4 border-l-red-500">
+              <AlertCircle className="flex-shrink-0 w-6 h-6" />
+              <div className="flex-1">
+                <p className="text-sm font-bold">Erro na Geração</p>
+                <p className="text-xs opacity-90 mt-1">{errorMsg}</p>
+              </div>
+              
+              {/* Se o erro for de chave e estiver no AI Studio, mostra botão. Se for local, sugere .env */}
+              {(errorMsg.includes('Chave') || errorMsg.includes('Cota')) && (window as any).aistudio && (
                 <button 
                   onClick={requestAccess}
-                  className="ml-auto px-3 py-1 text-xs bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-lg border border-red-500/30 transition-colors whitespace-nowrap"
+                  className="px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-lg border border-red-500/30 transition-colors whitespace-nowrap font-semibold"
                 >
                   Trocar Conta
                 </button>
@@ -244,14 +285,16 @@ const App: React.FC = () => {
                   <p className="text-sm text-slate-400 pl-8">Defina como será sua arte final.</p>
                 </div>
                 
-                {/* 2. Botão Secundário dentro do Painel (Sempre visível) */}
-                <button 
-                   onClick={requestAccess}
-                   className="p-2 text-slate-500 hover:text-gold-500 transition-colors rounded-lg hover:bg-white/5"
-                   title="Alterar Chave API Google"
-                >
-                  <Settings size={18} />
-                </button>
+                {/* Botão de Configuração (Apenas visual se não tiver função específica além do requestAccess) */}
+                {(window as any).aistudio && (
+                  <button 
+                     onClick={requestAccess}
+                     className="p-2 text-slate-500 hover:text-gold-500 transition-colors rounded-lg hover:bg-white/5"
+                     title="Alterar Chave API Google"
+                  >
+                    <Settings size={18} />
+                  </button>
+                )}
               </div>
 
               <ConfigPanel 
@@ -289,9 +332,11 @@ const App: React.FC = () => {
       <footer className="mt-24 text-center space-y-4 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl">
         <div className="flex justify-center gap-4 text-sm text-slate-500">
            <p>Graduation Studio AI &copy; 2024</p>
-           <button onClick={requestAccess} className="hover:text-gold-500 transition-colors underline decoration-slate-700 hover:decoration-gold-500">
-             Configurar Chave Google
-           </button>
+           {(window as any).aistudio && (
+             <button onClick={requestAccess} className="hover:text-gold-500 transition-colors underline decoration-slate-700 hover:decoration-gold-500">
+               Configurar Chave Google
+             </button>
+           )}
         </div>
       </footer>
     </div>
