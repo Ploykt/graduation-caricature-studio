@@ -97,10 +97,27 @@ function buildDallePrompt(physicalDescription: string, config: UserConfig): { pr
   const { style, framing, courseName, background } = config;
 
   // Style Definitions (Aggressive Differentiation)
-  // Put style AT THE START of the prompt to ensure DALL-E adheres to it.
-  const styleKeywords = style === ArtStyle.ThreeD
-    ? "STYLE: 3D DISNEY/PIXAR ANIMATION STYLE. High-end CGI, Octane Render, Cute 3D character, smooth plastic/clay textures, volumetric studio lighting, 3D mesh."
-    : "STYLE: 2D FLAT DIGITAL ILLUSTRATION. Vector art, clean thick outlines, flat vibrant colors, cel shading, hand-drawn look, NO 3D effects, 2D cartoon.";
+  const styleSection = style === ArtStyle.ThreeD
+    ? `STYLE:
+3D Pixar/Disney Animation Style.
+High-end CGI render.
+Octane Render.
+Volumetric studio lighting.
+Subsurface scattering (SSS) on skin.
+3D mesh.
+Cute but recognizable.
+NO 2D.
+NO flat vector art.`
+    : `STYLE:
+2D flat digital illustration.
+Vector art.
+Clean thick outlines.
+Flat vibrant colors.
+Soft cel shading.
+Hand-drawn cartoon look.
+NO realism.
+NO 3D.
+NO photorealism.`;
 
   const framingKeywords = framing === Framing.FullBody
     ? "Full Body shot (Head to toe, visible shoes)"
@@ -109,26 +126,35 @@ function buildDallePrompt(physicalDescription: string, config: UserConfig): { pr
   const bgDescription = {
     [BackgroundOption.Studio]: "Simple dark studio background with rim lighting.",
     [BackgroundOption.Campus]: "Blurred university campus background.",
-    [BackgroundOption.Festive]: "Festive party background with gold bokeh and confetti."
+    [BackgroundOption.Festive]: "Festive graduation background. Golden bokeh lights and confetti."
   }[background];
 
   const finalPrompt = `
-  ${styleKeywords}
+  ${styleSection}
   
-  SUBJECT CHARACTER (Must match these traits):
+  CHARACTER (must strictly follow these visual traits):
   ${physicalDescription}
   
   OUTFIT (Mandatory):
   - Black Graduation Gown (Beca) with wide sleeves.
   - Graduation Cap (Mortarboard) on head.
-  - Sash/Stole with colors for ${courseName} course.
+  - Graduation Sash/Stole with colors for ${courseName} course.
   - Holding a diploma.
 
   COMPOSITION:
   - ${framingKeywords}
   - ${bgDescription}
   - Expression: Big happy smile, proud.
-  - High quality 8k image.
+  
+  QUALITY:
+  High-quality illustration.
+  Professional cartoon character.
+  Clean lighting.
+  
+  INSTRUCTIONS:
+  Caricature exaggeration level: subtle (5–10%).
+  Do not distort identity.
+  Maintain recognizability.
   `;
 
   // Determine Size

@@ -143,26 +143,72 @@ export const generateCaricature = async (
 /**
  * FEATURE FOR HYBRID MODE
  * Uses Gemini 3 Flash (Fast/Cheap) to analyze facial features for DALL-E
+ * UPDATED: Uses strict "Visual Design Sheet" format to improve likeness.
  */
 export const analyzeImageWithGemini = async (imageBase64: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
 
   const prompt = `
-  You are an expert visual assistant. 
-  Describe the physical appearance of the person in this image for a character designer.
+  You are an assistant that extracts PURELY VISUAL ART REFERENCES from an image.
+
+  IMPORTANT RULES:
+  - Do NOT identify the person.
+  - Do NOT guess age, gender, ethnicity, profession, or personality.
+  - Do NOT mention that this is a real person.
+  - Treat the image as a visual reference for an ILLUSTRATED CHARACTER.
+  - Focus only on what is clearly visible.
   
-  FOCUS ONLY ON VISUAL TRAITS:
-  1. Gender presentation
-  2. Estimated age range (e.g., "young adult")
-  3. Skin tone (be specific, e.g., "warm olive", "pale", "dark brown")
-  4. Hair style, texture, and color (e.g., "short curly black hair", "long straight blonde hair")
-  5. Facial hair (mustache, beard, stubble? - VERY IMPORTANT)
-  6. Glasses? (Shape and color)
-  7. Key facial features (eye shape, nose shape)
+  TASK:
+  Analyze the image and produce a CHARACTER VISUAL DESIGN SHEET for an illustrator.
   
-  Do not mention the person's name or identity. Just the visual description.
-  Output as a concise paragraph.
+  OUTPUT FORMAT (strict):
+  
+  FACE & HEAD:
+  - Face shape (round, oval, square, heart, etc.)
+  - Jawline (soft, sharp, defined)
+  - Cheeks (flat, full, slightly chubby)
+  - Chin (pointed, rounded, strong)
+  
+  EYES & EYEBROWS:
+  - Eye shape (round, almond, narrow, wide-set)
+  - Eye size (small, medium, large)
+  - Eye color
+  - Eyebrow shape (straight, arched, thick, thin)
+  
+  NOSE:
+  - Size (small, medium, large)
+  - Shape (straight, wide, narrow, rounded tip)
+  
+  MOUTH & FACIAL HAIR:
+  - Lip shape (thin, medium, full)
+  - Facial hair (none / mustache / beard / goatee)
+  - Beard style (short, full, faded, sharp edges)
+  
+  HAIR:
+  - Hair color
+  - Hair length
+  - Hair style (fade, buzzed sides, textured top, curly, straight)
+  - Hairline (straight, slightly receding, widow’s peak)
+  
+  SKIN TONE:
+  - Visual skin tone description ONLY (e.g. light beige, warm olive, medium brown)
+  
+  ACCESSORIES:
+  - Glasses (yes/no, shape)
+  - Earrings or visible accessories
+  
+  EXPRESSION:
+  - Neutral / smiling / serious / confident
+  
+  IMPORTANT:
+  - Be concise.
+  - Use bullet points only.
+  - No full sentences.
+
+  EXTRA INSTRUCTION:
+  Pay special attention to proportions (head size, eye spacing, jaw width),
+  as these are crucial for caricature likeness.
   `;
 
   // Use gemini-3-flash-preview for text analysis tasks (multimodal input)
@@ -176,5 +222,5 @@ export const analyzeImageWithGemini = async (imageBase64: string): Promise<strin
     }
   });
 
-  return response.text || "A young graduate with a happy expression.";
+  return response.text || "A graduate with a happy expression.";
 };
