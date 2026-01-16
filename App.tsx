@@ -1,32 +1,25 @@
 import React, { useState } from 'react';
-import { ArtStyle, Framing, BackgroundOption, UserConfig, LoadingState, AiProvider } from './types';
-import { generateCaricature, analyzeImageWithGemini } from './services/geminiService';
-import { generateOpenAICaricature, generateDalleImageFromDescription } from './services/openaiService';
+import { ArtStyle, Framing, BackgroundOption, UserConfig, LoadingState } from './types';
+import { generateCaricature } from './services/geminiService';
 import ImageUploader from './components/ImageUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ResultDisplay from './components/ResultDisplay';
 import LoadingOverlay from './components/LoadingOverlay';
-import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Cpu } from 'lucide-react';
+import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
 
 const App: React.FC = () => {
-  // API Keys are now obtained exclusively from process.env.API_KEY / process.env.OPENAI_API_KEY
-  // No UI for key management is allowed.
-  
   const [image, setImage] = useState<string | null>(null);
   
-  // Default to Gemini (Better likeness)
   const [config, setConfig] = useState<UserConfig>({
     courseName: '',
     style: ArtStyle.ThreeD,
     framing: Framing.Portrait,
     background: BackgroundOption.Festive,
-    provider: AiProvider.Gemini 
   });
   
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [providerName, setProviderName] = useState<string>('');
 
   const handleGenerate = async () => {
     if (!image) return;
@@ -39,43 +32,12 @@ const App: React.FC = () => {
     setErrorMsg(null);
 
     try {
-      let generatedBase64;
-      
-      // --- OPENAI PURE ---
-      if (config.provider === AiProvider.OpenAI) {
-        if (!process.env.OPENAI_API_KEY) {
-          throw new Error("Chave da OpenAI não configurada nas variáveis de ambiente.");
-        }
-        setProviderName('OpenAI (DALL-E 3)');
-        generatedBase64 = await generateOpenAICaricature(process.env.OPENAI_API_KEY, image, config);
-      } 
-      
-      // --- HYBRID (GEMINI VISION + DALL-E) ---
-      else if (config.provider === AiProvider.Hybrid) {
-        if (!process.env.OPENAI_API_KEY || !process.env.API_KEY) {
-           throw new Error("Para o modo Híbrido, você precisa de AMBAS as chaves (Gemini e OpenAI) configuradas.");
-        }
-        
-        setProviderName('Híbrido (Gemini Vision + DALL-E)');
-        
-        // Step 1: Analyze with Gemini (Free/Cheap/Better Vision)
-        console.log("Iniciando modo híbrido: Análise Gemini...");
-        const description = await analyzeImageWithGemini(image);
-        console.log("Descrição Gemini:", description);
-
-        // Step 2: Generate with DALL-E 3
-        generatedBase64 = await generateDalleImageFromDescription(process.env.OPENAI_API_KEY, description, config);
+      if (!process.env.API_KEY) {
+        throw new Error("Chave do Google Gemini não configurada nas variáveis de ambiente.");
       }
 
-      // --- GEMINI PURE ---
-      else {
-        if (!process.env.API_KEY) {
-          throw new Error("Chave do Google Gemini não configurada nas variáveis de ambiente.");
-        }
-        setProviderName('Google Gemini');
-        // generateCaricature now uses process.env.API_KEY internally
-        generatedBase64 = await generateCaricature(image, config);
-      }
+      // Strictly use Gemini via process.env.API_KEY
+      const generatedBase64 = await generateCaricature(image, config);
 
       setResultImage(generatedBase64);
       setLoadingState('success');
@@ -85,12 +47,10 @@ const App: React.FC = () => {
       
       const msg = error.message || "";
       
-      if (msg === 'PRIVACY_REFUSAL') {
-        setErrorMsg("⚠️ Bloqueio de Privacidade (OpenAI): O DALL-E recusou gerar esta imagem. Tente usar o modelo 'Google Gemini' puro.");
-      } else if (msg === 'INVALID_KEY' || msg.includes('401')) {
+      if (msg === 'INVALID_KEY' || msg.includes('401') || msg.includes('403')) {
         setErrorMsg("Chave de API inválida ou expirada. Verifique as variáveis de ambiente.");
       } else if (msg.includes('429') || msg.includes('billing') || msg.includes('RESOURCE_EXHAUSTED')) {
-         setErrorMsg("Erro de Cota: Limite atingido na API selecionada.");
+         setErrorMsg("Erro de Cota: Limite atingido na API do Google Gemini.");
       } else {
         setErrorMsg(msg || "Algo deu errado. Por favor, tente novamente.");
       }
@@ -102,7 +62,6 @@ const App: React.FC = () => {
     setImage(null);
     setLoadingState('idle');
     setErrorMsg(null);
-    setProviderName('');
   };
 
   return (
@@ -127,7 +86,7 @@ const App: React.FC = () => {
         <div className="flex justify-center gap-4 text-xs text-slate-500 pt-2">
           <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Alta Resolução (8K)</span>
           <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Trajes Oficiais</span>
-          <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Google Gemini & OpenAI</span>
+          <span className="flex items-center gap-1"><Sparkles size={12} className="text-blue-400"/> Powered by Google Gemini</span>
         </div>
       </header>
 
@@ -155,13 +114,6 @@ const App: React.FC = () => {
               <AlertCircle className="flex-shrink-0" />
               <p className="text-sm font-medium">{errorMsg}</p>
             </div>
-          )}
-
-          {/* Provider Indicator (Subtle) */}
-          {providerName && resultImage && (
-             <div className="mt-2 text-center text-xs text-slate-600 flex items-center justify-center gap-1">
-                <Cpu size={12}/> Gerado via {providerName}
-             </div>
           )}
         </div>
 

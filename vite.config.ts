@@ -11,8 +11,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       // Isso permite que o código use essas variáveis no navegador
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      'process.env.OPENAI_API_KEY': JSON.stringify(env.OPENAI_API_KEY)
+      'process.env.API_KEY': JSON.stringify(env.API_KEY)
     }
   }
 })
