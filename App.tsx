@@ -415,7 +415,7 @@ const App: React.FC = () => {
       <footer className="mt-24 text-center space-y-4 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl z-10">
         <div className="flex justify-center gap-4 text-sm text-slate-500">
            <p>Graduation Studio AI &copy; 2024</p>
-           <span className="text-amber-500/50 text-xs px-2 border border-amber-500/20 rounded">Auth: Firebase | Credits: Cloud | Images: Local</span>
+           <span className="text-amber-500/50 text-xs px-2 border border-amber-500/20 rounded">A.I</span>
         </div>
       </footer>
     </div>
