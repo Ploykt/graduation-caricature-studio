@@ -28,36 +28,63 @@ const App: React.FC = () => {
   const [hasAccess, setHasAccess] = useState<boolean>(false);
   const [isCheckingAccess, setIsCheckingAccess] = useState<boolean>(true);
 
-  // 0. Check URL Params for Payment Status
+  // 0. VERIFICAÇÃO DE PAGAMENTO (ABACATE PAY & STRIPE)
   useEffect(() => {
-    const checkPayment = async () => {
+    const processPayment = async () => {
+        // Verifica se há pagamentos pendentes
+        const pendingBillId = localStorage.getItem('pending_abacate_bill');
         const params = new URLSearchParams(window.location.search);
+        const isAbacateReturn = params.get('payment_provider') === 'abacate';
         
-        // 1. STRIPE SUCCESS
+        // Se temos um bill ID e o usuário está logado, verificamos o status
+        if (pendingBillId && user) {
+             console.log("Verificando status do Pix:", pendingBillId);
+             const isPaid = await abacatePayService.checkBillStatus(pendingBillId);
+             
+             if (isPaid) {
+                 const storedCredits = localStorage.getItem('pending_abacate_credits');
+                 const creditsToAdd = storedCredits ? parseInt(storedCredits, 10) : 0;
+                 
+                 if (creditsToAdd > 0) {
+                     try {
+                        console.log(`Pagamento confirmado. Adicionando ${creditsToAdd} créditos para ${user.uid}`);
+                        await userService.updateCredits(user.uid, creditsToAdd);
+                        setPaymentStatus('success');
+                        alert(`Pagamento confirmado! ${creditsToAdd} créditos foram adicionados à sua conta.`);
+                     } catch (err) {
+                        console.error("Erro ao adicionar créditos:", err);
+                        alert("Houve um erro ao creditar sua conta. Entre em contato com o suporte.");
+                     }
+                 }
+                 
+                 // Limpeza
+                 localStorage.removeItem('pending_abacate_bill');
+                 localStorage.removeItem('pending_abacate_credits');
+                 
+                 // Limpa URL
+                 if (isAbacateReturn) {
+                    window.history.replaceState({}, '', window.location.pathname);
+                 }
+                 
+                 setTimeout(() => setPaymentStatus(null), 5000);
+             } else {
+                 console.log("Pix ainda não consta como pago.");
+             }
+        }
+        
+        // Verifica Stripe (Legacy)
         if (params.get('payment_success') === 'true' && !params.get('payment_provider')) {
           setPaymentStatus('success');
           window.history.replaceState({}, '', window.location.pathname);
           setTimeout(() => setPaymentStatus(null), 5000);
         }
-
-        // 2. ABACATE PAY SUCCESS (Polling verification)
-        if (params.get('payment_provider') === 'abacate' && params.get('status') === 'success') {
-            const billId = localStorage.getItem('pending_abacate_bill');
-            if (billId && auth.currentUser) {
-                const isPaid = await abacatePayService.checkBillStatus(billId);
-                if (isPaid) {
-                    setPaymentStatus('success');
-                    localStorage.removeItem('pending_abacate_bill');
-                    alert("Pagamento Pix detectado! Seus créditos serão atualizados em instantes.");
-                }
-            }
-            window.history.replaceState({}, '', window.location.pathname);
-            setTimeout(() => setPaymentStatus(null), 5000);
-        }
     };
-    
-    setTimeout(checkPayment, 1000);
-  }, []);
+
+    // Executa verificação sempre que o usuário carrega (login) ou volta para a página
+    if (user) {
+        processPayment();
+    }
+  }, [user]); // Dependência crucial: user. Sem user, não processa.
 
   // 1. Check API Key for Gemini
   useEffect(() => {
@@ -234,7 +261,7 @@ const App: React.FC = () => {
             <CheckCircle2 className="w-6 h-6 text-green-400" />
             <div>
               <p className="font-bold">Pagamento Confirmado!</p>
-              <p className="text-xs opacity-80">Seus créditos estão sendo processados...</p>
+              <p className="text-xs opacity-80">Seus créditos foram creditados.</p>
             </div>
           </div>
         </div>
@@ -415,7 +442,7 @@ const App: React.FC = () => {
       <footer className="mt-24 text-center space-y-4 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl z-10">
         <div className="flex justify-center gap-4 text-sm text-slate-500">
            <p>Graduation Studio AI &copy; 2024</p>
-           <span className="text-amber-500/50 text-xs px-2 border border-amber-500/20 rounded">A.I</span>
+           <span className="text-amber-500/50 text-xs px-2 border border-amber-500/20 rounded">Auth: Firebase | Credits: Cloud | Images: Local</span>
         </div>
       </footer>
     </div>
