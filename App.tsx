@@ -5,29 +5,70 @@ import ImageUploader from './components/ImageUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ResultDisplay from './components/ResultDisplay';
 import LoadingOverlay from './components/LoadingOverlay';
-import { GraduationCap, Wand2, AlertCircle, CheckCircle2, Sparkles, KeyRound, Settings, FileCode, Terminal } from 'lucide-react';
+import AuthModal from './components/AuthModal';
+import PricingModal from './components/PricingModal';
+import Gallery from './components/Gallery';
+import { GraduationCap, Wand2, AlertCircle, Sparkles, LogOut, User as UserIcon, Coins, CheckCircle2 } from 'lucide-react';
+import { localDb } from './services/localDb';
+import { userService } from './services/userService'; 
+import { auth, db } from './services/firebase';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { abacatePayService } from './services/abacatePayService';
 
 const App: React.FC = () => {
+  // --- USER & CREDITS STATE ---
+  const [user, setUser] = useState<User | null>(null); 
+  const [credits, setCredits] = useState<number>(0);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<'success' | 'canceled' | null>(null);
+
   // --- API KEY GATE STATE ---
   const [hasAccess, setHasAccess] = useState<boolean>(false);
   const [isCheckingAccess, setIsCheckingAccess] = useState<boolean>(true);
-  const [isLocalhost, setIsLocalhost] = useState<boolean>(false);
 
+  // 0. Check URL Params for Payment Status
+  useEffect(() => {
+    const checkPayment = async () => {
+        const params = new URLSearchParams(window.location.search);
+        
+        // 1. STRIPE SUCCESS
+        if (params.get('payment_success') === 'true' && !params.get('payment_provider')) {
+          setPaymentStatus('success');
+          window.history.replaceState({}, '', window.location.pathname);
+          setTimeout(() => setPaymentStatus(null), 5000);
+        }
+
+        // 2. ABACATE PAY SUCCESS (Polling verification)
+        if (params.get('payment_provider') === 'abacate' && params.get('status') === 'success') {
+            const billId = localStorage.getItem('pending_abacate_bill');
+            if (billId && auth.currentUser) {
+                const isPaid = await abacatePayService.checkBillStatus(billId);
+                if (isPaid) {
+                    setPaymentStatus('success');
+                    localStorage.removeItem('pending_abacate_bill');
+                    alert("Pagamento Pix detectado! Seus créditos serão atualizados em instantes.");
+                }
+            }
+            window.history.replaceState({}, '', window.location.pathname);
+            setTimeout(() => setPaymentStatus(null), 5000);
+        }
+    };
+    
+    setTimeout(checkPayment, 1000);
+  }, []);
+
+  // 1. Check API Key for Gemini
   useEffect(() => {
     const checkAccess = async () => {
-      // Verifica se está rodando localmente
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      setIsLocalhost(isLocal);
-
       try {
         if ((window as any).aistudio) {
           const hasKey = await (window as any).aistudio.hasSelectedApiKey();
           setHasAccess(hasKey);
         } else if (process.env.API_KEY) {
-          // Se tiver variável de ambiente, libera o acesso
           setHasAccess(true);
         } else {
-          // Sem chave e sem AI Studio
           setHasAccess(false);
         }
       } catch (error) {
@@ -37,6 +78,44 @@ const App: React.FC = () => {
       }
     };
     checkAccess();
+  }, []);
+
+  // 2. Initialize DB & Auth Listener
+  useEffect(() => {
+    const initApp = async () => {
+      await localDb.init(); 
+      
+      if (!auth) {
+        console.log("Modo Offline: Firebase Auth não disponível.");
+        setCredits(3);
+        return;
+      }
+
+      const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+        setUser(currentUser);
+        if (currentUser) {
+          try {
+            await userService.syncUser(currentUser.uid, currentUser.email);
+            if (db) {
+              const userRef = doc(db, "users", currentUser.uid);
+              const unsubDocs = onSnapshot(userRef, (doc) => {
+                 if (doc.exists()) {
+                   setCredits(doc.data().credits || 0);
+                 }
+              });
+              return () => unsubDocs();
+            }
+          } catch (error) {
+            console.error("Erro ao sincronizar usuário:", error);
+          }
+        } else {
+          setCredits(0);
+        }
+      });
+
+      return () => unsubscribeAuth();
+    };
+    initApp();
   }, []);
 
   const requestAccess = async () => {
@@ -49,194 +128,202 @@ const App: React.FC = () => {
         console.error("Seleção de chave cancelada ou falhou", e);
       }
     } else {
-      // Se clicou no botão mas não tem AI Studio (ambiente local sem .env)
-      alert("Ambiente Google AI Studio não detectado.\n\nPara usar sua nova chave:\n1. Crie um arquivo chamado .env na raiz do projeto.\n2. Adicione a linha: API_KEY=SuaChaveAqui\n3. Reinicie o projeto (npm run dev).");
+      alert("Ambiente Google AI Studio não detectado.");
     }
   };
 
   // --- APP STATE ---
   const [image, setImage] = useState<string | null>(null);
-  
   const [config, setConfig] = useState<UserConfig>({
     courseName: '',
     style: ArtStyle.ThreeD,
     framing: Framing.Portrait,
     background: BackgroundOption.Festive,
   });
-  
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isRefining, setIsRefining] = useState(false);
 
-  const handleGenerate = async () => {
-    if (!image) return;
-    if (!config.courseName.trim()) {
-      alert("Por favor, digite o nome do curso (ex: Enfermagem)!");
-      return;
+  // --- HANDLERS ---
+  const handleLogout = async () => {
+    if (auth) {
+      await signOut(auth);
     }
-
-    setLoadingState('generating');
-    setErrorMsg(null);
-
-    try {
-      // Cria nova instância a cada chamada para garantir que pegue a chave mais recente selecionada
-      const generatedBase64 = await generateCaricature(image, config);
-
-      setResultImage(generatedBase64);
-      setLoadingState('success');
-    } catch (error: any) {
-      console.error(error);
-      setLoadingState('error');
-      
-      const msg = error.message || "";
-      
-      // Tratamento de erros comuns para orientar o usuário
-      if (msg === 'INVALID_KEY' || msg.includes('401') || msg.includes('403') || msg.includes('API key not valid')) {
-        setErrorMsg("Chave Inválida. Verifique se a 'Google Generative Language API' está ativada no seu projeto Google Cloud ou se copiou a chave corretamente.");
-        setHasAccess(false); 
-      } else if (msg.includes('404') || msg.includes('Not Found')) {
-         setErrorMsg("Modelo não encontrado ou API não ativada. Verifique se seu projeto Google Cloud tem acesso ao Gemini API.");
-      } else if (msg.includes('429') || msg.includes('billing') || msg.includes('RESOURCE_EXHAUSTED')) {
-         setErrorMsg("Limite de requisições excedido (Erro 429). Aguarde alguns instantes ou troque de chave.");
-      } else {
-        setErrorMsg(msg || "Algo deu errado. Por favor, tente novamente.");
-      }
-    }
+    setUser(null);
+    resetFlow();
   };
+
+  const executeGeneration = async (refinementInstruction?: string) => {
+     if (auth && !user) {
+        setShowAuthModal(true);
+        return;
+      }
+  
+      if (credits <= 0) {
+        setShowPricingModal(true);
+        return;
+      }
+  
+      if (!image) return;
+      if (!config.courseName.trim()) {
+        alert("Por favor, digite o nome do curso!");
+        return;
+      }
+
+      if (refinementInstruction) {
+          setIsRefining(true);
+      } else {
+          setLoadingState('generating');
+      }
+      
+      setErrorMsg(null);
+  
+      try {
+        const generatedBase64 = await generateCaricature(image, config, refinementInstruction);
+  
+        if (user && auth) {
+          await userService.updateCredits(user.uid, -1);
+          const configToSave = refinementInstruction 
+            ? { ...config, refinement: refinementInstruction }
+            : config;
+          await localDb.saveToHistory(user.uid, generatedBase64, configToSave);
+        } else {
+           setCredits(prev => prev - 1);
+        }
+        
+        setResultImage(generatedBase64);
+        setLoadingState('success');
+      } catch (error: any) {
+        console.error(error);
+        setLoadingState('error');
+        setErrorMsg(error.message || "Algo deu errado.");
+      } finally {
+          setIsRefining(false);
+      }
+  };
+
+  const handleGenerate = () => executeGeneration();
+  const handleRefine = (instruction: string) => executeGeneration(instruction);
 
   const resetFlow = () => {
     setResultImage(null);
     setImage(null);
     setLoadingState('idle');
     setErrorMsg(null);
+    setIsRefining(false);
   };
 
-  // --- RENDER: LOADING CHECK ---
   if (isCheckingAccess) {
     return (
       <div className="min-h-screen w-full bg-[#0B0F19] flex items-center justify-center">
         <div className="animate-pulse flex flex-col items-center gap-4">
            <GraduationCap className="w-12 h-12 text-slate-600" />
-           <p className="text-slate-500 font-medium">Verificando acesso ao estúdio...</p>
         </div>
       </div>
     );
   }
 
-  // --- RENDER: API KEY GATE (LANDING) ---
-  if (!hasAccess) {
-    const showLocalInstructions = isLocalhost && !(window as any).aistudio;
-
-    return (
-      <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center justify-center p-4">
-        <div className="max-w-xl w-full glass-panel p-8 md:p-10 rounded-3xl text-center space-y-8 border border-gold-500/20 shadow-2xl shadow-black/50 relative overflow-hidden">
-          
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-gold-500/10 blur-[60px] rounded-full pointer-events-none"></div>
-
-          <div className="relative z-10 flex flex-col items-center">
-            <div className="bg-gradient-to-br from-slate-800 to-black p-5 rounded-2xl mb-6 border border-slate-700 shadow-lg group">
-              <GraduationCap className="w-10 h-10 text-gold-500 group-hover:scale-110 transition-transform duration-500" />
-            </div>
-            
-            <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">
-              Estúdio de Formatura
-            </h1>
-            
-            {!showLocalInstructions ? (
-              <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
-                 Conecte sua conta Google para gerar caricaturas incríveis.
-              </p>
-            ) : (
-              <div className="text-left bg-slate-900/80 p-6 rounded-xl border border-slate-700 w-full animate-in fade-in slide-in-from-bottom-4">
-                 <h3 className="text-gold-400 font-bold flex items-center gap-2 mb-4">
-                   <Terminal size={18} />
-                   Configuração Necessária
-                 </h3>
-                 <p className="text-slate-300 text-sm mb-4">
-                   Você criou uma chave, mas o app não a encontrou. Para rodar localmente:
-                 </p>
-                 <ol className="text-xs text-slate-400 space-y-3 list-decimal pl-4">
-                   <li className="pl-1">Crie um arquivo chamado <code className="text-green-400 bg-black/50 px-1 py-0.5 rounded">.env</code> na pasta raiz do projeto.</li>
-                   <li className="pl-1">Abra o arquivo e cole sua chave assim:
-                     <div className="mt-2 bg-black/50 p-3 rounded-lg border border-slate-800 font-mono text-slate-300 flex items-center gap-2">
-                       <FileCode size={14} className="text-blue-400" />
-                       API_KEY=AIzaSy...
-                     </div>
-                   </li>
-                   <li className="pl-1">Pare o terminal e rode <code className="text-white">npm run dev</code> novamente.</li>
-                 </ol>
-              </div>
-            )}
-          </div>
-          
-          <div className="space-y-4 relative z-10">
-            {/* Se estiver no AI Studio, mostra botão do Google. Se estiver local sem chave, o botão é um fallback */}
-            {!showLocalInstructions && (
-              <button 
-                onClick={requestAccess}
-                className="w-full py-4 px-6 rounded-xl font-bold text-lg bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3"
-              >
-                <KeyRound size={20} />
-                <span>Conectar Google API</span>
-              </button>
-            )}
-
-            <div className="text-[10px] text-slate-500 px-4 py-3 rounded-lg bg-slate-900/50 border border-slate-800">
-              <p>Dica: Certifique-se que a <strong>Generative Language API</strong> está ativada no seu projeto Google Cloud.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --- RENDER: MAIN APP ---
   return (
     <div className="min-h-screen w-full bg-[#0B0F19] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-[#0B0F19] to-[#0B0F19] flex flex-col items-center py-10 px-4 md:px-8 animate-in fade-in duration-700 relative">
       
-      {/* 1. Botão Flutuante Superior Direito (Sempre visível) */}
-      <div className="absolute top-4 right-4 z-50">
-          {(window as any).aistudio && (
-            <button 
-              onClick={requestAccess}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 hover:border-gold-500/50 text-xs font-semibold text-slate-300 hover:text-white transition-all backdrop-blur-md shadow-lg"
-            >
-              <KeyRound size={14} className="text-gold-500" />
-              <span className="hidden sm:inline">Alterar API Key</span>
-              <span className="sm:hidden">API</span>
-            </button>
-          )}
+      {/* ALERTS */}
+      {paymentStatus === 'success' && (
+        <div className="fixed top-24 z-50 animate-in slide-in-from-top-4 fade-in duration-500">
+          <div className="bg-green-500/20 border border-green-500/50 text-green-200 px-6 py-4 rounded-xl shadow-2xl backdrop-blur-md flex items-center gap-3">
+            <CheckCircle2 className="w-6 h-6 text-green-400" />
+            <div>
+              <p className="font-bold">Pagamento Confirmado!</p>
+              <p className="text-xs opacity-80">Seus créditos estão sendo processados...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALS */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      <PricingModal isOpen={showPricingModal} onClose={() => setShowPricingModal(false)} onSelectPlan={() => setShowPricingModal(false)} />
+
+      {/* TOP BAR */}
+      <div className="absolute top-0 left-0 right-0 p-4 md:px-8 flex justify-between items-center z-40 bg-gradient-to-b from-[#0B0F19] to-transparent">
+        <div className="flex items-center gap-2 text-gold-500 font-bold tracking-tight">
+          <GraduationCap size={24} />
+          <span className="hidden sm:inline">Graduation Studio</span>
+        </div>
+
+        <div className="flex items-center gap-4">
+           {!hasAccess && (
+             <button onClick={requestAccess} className="text-xs text-red-400 border border-red-500/30 px-2 py-1 rounded-md bg-red-500/10">
+               ! API Key
+             </button>
+           )}
+
+           {/* --- BOTÃO PLANOS SOLICITADO --- */}
+           {/* Aparece sempre, para que o usuário possa ver os preços antes ou depois de logar */}
+           <button 
+             onClick={() => setShowPricingModal(true)}
+             className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-sm font-semibold text-white transition-all backdrop-blur-md"
+           >
+             <Coins size={16} className="text-gold-500" />
+             Planos
+           </button>
+
+           {user ? (
+             <div className="flex items-center gap-3 bg-slate-800/80 backdrop-blur-md p-1.5 pr-4 rounded-full border border-slate-700">
+               {user.photoURL ? (
+                  <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border border-gold-500/50" />
+               ) : (
+                  <div className="bg-gradient-to-br from-gold-500 to-amber-600 w-8 h-8 rounded-full flex items-center justify-center text-black font-bold text-xs">
+                    {user.email?.substring(0,2).toUpperCase() || 'U'}
+                  </div>
+               )}
+               
+               <div className="flex flex-col">
+                 <span className="text-xs text-slate-400 leading-none mb-0.5">Créditos</span>
+                 <span className="text-white font-bold text-sm leading-none">{credits}</span>
+               </div>
+               <div className="h-4 w-[1px] bg-slate-600 mx-1"></div>
+               <button onClick={handleLogout} className="text-slate-400 hover:text-white" title="Sair">
+                 <LogOut size={16} />
+               </button>
+             </div>
+           ) : (
+             <button 
+               onClick={() => {
+                 if (auth) setShowAuthModal(true);
+                 else alert("Login indisponível.");
+               }}
+               className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black text-sm font-bold transition-all shadow-lg"
+             >
+               <UserIcon size={16} />
+               {auth ? "Entrar" : "Demo"}
+             </button>
+           )}
+        </div>
       </div>
 
       {/* Header Premium */}
-      <header className="mb-12 text-center space-y-4 max-w-2xl mx-auto mt-8 md:mt-0">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold-500/10 border border-gold-500/20 text-gold-400 text-sm font-semibold tracking-wide uppercase">
-          <GraduationCap size={16} />
-          <span>Edição Especial Formandos</span>
-        </div>
-        
+      <header className="mb-12 text-center space-y-4 max-w-2xl mx-auto mt-16 md:mt-8">
         <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight leading-tight">
           Eternize sua <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold-300 via-gold-500 to-amber-600">Conquista</span>
         </h1>
-        
         <p className="text-slate-400 text-lg">
-          Transforme sua selfie em uma caricatura profissional de formatura digna de um quadro. 
+          Transforme sua selfie em uma caricatura profissional.
         </p>
-
-        <div className="flex justify-center gap-4 text-xs text-slate-500 pt-2">
-          <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Alta Resolução</span>
-          <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500"/> Trajes Oficiais</span>
-          <span className="flex items-center gap-1"><Sparkles size={12} className="text-blue-400"/> Powered by Google Gemini</span>
-        </div>
       </header>
 
       {/* Main Content */}
-      <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start relative z-10">
         
         {/* Left Column: Result or Upload */}
         <div className={`lg:col-span-7 w-full transition-all duration-500 ${resultImage ? 'order-1' : 'order-1'}`}>
           {resultImage ? (
-            <ResultDisplay imageUrl={resultImage} onReset={resetFlow} />
+            <ResultDisplay 
+                imageUrl={resultImage} 
+                onReset={resetFlow} 
+                onRefine={handleRefine}
+                isRefining={isRefining}
+            />
           ) : (
             <div className="relative">
               {loadingState === 'generating' && <LoadingOverlay />}
@@ -250,22 +337,14 @@ const App: React.FC = () => {
           
           {/* Error Banner */}
           {errorMsg && (
-            <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/50 text-red-200 flex flex-col md:flex-row items-center gap-3 animate-in slide-in-from-top-2 border-l-4 border-l-red-500">
-              <AlertCircle className="flex-shrink-0 w-6 h-6" />
-              <div className="flex-1">
-                <p className="text-sm font-bold">Erro na Geração</p>
-                <p className="text-xs opacity-90 mt-1">{errorMsg}</p>
+            <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/50 text-red-200 flex flex-col items-start gap-3 animate-in slide-in-from-top-2 border-l-4 border-l-red-500">
+              <div className="flex items-center gap-3 w-full">
+                <AlertCircle className="flex-shrink-0 w-6 h-6" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold">Erro na Geração</p>
+                  <p className="text-xs opacity-90 mt-1">{errorMsg}</p>
+                </div>
               </div>
-              
-              {/* Se o erro for de chave e estiver no AI Studio, mostra botão. Se for local, sugere .env */}
-              {(errorMsg.includes('Chave') || errorMsg.includes('Cota')) && (window as any).aistudio && (
-                <button 
-                  onClick={requestAccess}
-                  className="px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-lg border border-red-500/30 transition-colors whitespace-nowrap font-semibold"
-                >
-                  Trocar Conta
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -274,51 +353,50 @@ const App: React.FC = () => {
         {!resultImage && (
           <div className="lg:col-span-5 w-full order-2">
             <div className="glass-panel rounded-2xl p-6 md:p-8 space-y-8 sticky top-8">
-              
-              {/* Header do Painel */}
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold-500 text-black text-xs font-bold">1</span>
                     Personalize seu Estilo
                   </h2>
-                  <p className="text-sm text-slate-400 pl-8">Defina como será sua arte final.</p>
                 </div>
-                
-                {/* Botão de Configuração (Apenas visual se não tiver função específica além do requestAccess) */}
-                {(window as any).aistudio && (
-                  <button 
-                     onClick={requestAccess}
-                     className="p-2 text-slate-500 hover:text-gold-500 transition-colors rounded-lg hover:bg-white/5"
-                     title="Alterar Chave API Google"
-                  >
-                    <Settings size={18} />
-                  </button>
-                )}
               </div>
 
-              <ConfigPanel 
-                config={config} 
-                onChange={setConfig} 
-                disabled={loadingState === 'generating'} 
-              />
+              <ConfigPanel config={config} onChange={setConfig} disabled={loadingState === 'generating'} />
 
-              <div className="pt-4 border-t border-white/5">
+              <div className="pt-4 border-t border-white/5 space-y-3">
+                {user && credits === 0 && (
+                   <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-200 flex items-center gap-2 mb-2">
+                     <AlertCircle size={14} />
+                     Você não tem créditos suficientes.
+                   </div>
+                )}
+
                 <button
                   onClick={handleGenerate}
-                  disabled={!image || !config.courseName || loadingState === 'generating'}
+                  disabled={loadingState === 'generating'}
                   className={`w-full py-4 px-6 rounded-xl font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-lg ${
-                    !image || !config.courseName || loadingState === 'generating'
+                    loadingState === 'generating'
                       ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                       : 'bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-amber-900/20 transform hover:scale-[1.02] hover:shadow-xl'
                   }`}
                 >
                   {loadingState === 'generating' ? (
-                    <span>Processando no Estúdio...</span>
+                    <span>Processando...</span>
+                  ) : !user && auth ? (
+                    <>
+                      <UserIcon size={24} className="text-black" />
+                      <span>Entrar para Gerar</span>
+                    </>
+                  ) : credits <= 0 ? (
+                     <>
+                      <Sparkles size={24} className="text-black" />
+                      <span>Comprar Créditos</span>
+                     </>
                   ) : (
                     <>
                       <Wand2 size={24} className="text-black" />
-                      <span>Gerar Minha Caricatura</span>
+                      <span>Gerar (1 Crédito)</span>
                     </>
                   )}
                 </button>
@@ -328,15 +406,16 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="mt-24 text-center space-y-4 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl">
+      {user && (
+        <div className="w-full max-w-6xl z-10">
+          <Gallery userId={user.uid} />
+        </div>
+      )}
+
+      <footer className="mt-24 text-center space-y-4 pb-8 border-t border-white/5 pt-8 w-full max-w-4xl z-10">
         <div className="flex justify-center gap-4 text-sm text-slate-500">
            <p>Graduation Studio AI &copy; 2024</p>
-           {(window as any).aistudio && (
-             <button onClick={requestAccess} className="hover:text-gold-500 transition-colors underline decoration-slate-700 hover:decoration-gold-500">
-               Configurar Chave Google
-             </button>
-           )}
+           <span className="text-amber-500/50 text-xs px-2 border border-amber-500/20 rounded">Auth: Firebase | Credits: Cloud | Images: Local</span>
         </div>
       </footer>
     </div>
