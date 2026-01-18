@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, X, Zap, Crown, Star, Loader2, QrCode, Phone, ArrowLeft, FileText } from 'lucide-react';
 import { abacatePayService } from '../services/abacatePayService';
+import { auth } from '../services/firebase';
 
 interface PricingModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface SelectedPlan {
   id: string;
   name: string;
   price: number;
+  credits: number;
 }
 
 const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose }) => {
@@ -30,6 +32,12 @@ const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose }) => {
   };
 
   const handlePlanSelect = (plan: SelectedPlan) => {
+    if (!auth.currentUser) {
+      alert("Por favor, faça login ou crie uma conta para comprar créditos.");
+      onClose();
+      // Idealmente abriria o modal de Auth aqui, mas vamos fechar para o usuário clicar em Entrar.
+      return;
+    }
     setSelectedPlan(plan);
   };
 
@@ -57,6 +65,9 @@ const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose }) => {
 
     setLoadingPix(true);
     try {
+      // Salva a quantidade de créditos esperada para processar no retorno
+      localStorage.setItem('pending_abacate_credits', selectedPlan.credits.toString());
+
       // Agora enviamos também o CPF
       const url = await abacatePayService.createPixCharge(selectedPlan.price, selectedPlan.name, phoneNumber, cleanCpf);
       window.location.href = url;
@@ -155,7 +166,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose }) => {
                     </div>
 
                     <button
-                      onClick={() => handlePlanSelect({ id: plan.id, name: plan.name, price: plan.numericPrice })}
+                      onClick={() => handlePlanSelect({ id: plan.id, name: plan.name, price: plan.numericPrice, credits: plan.credits })}
                       className="w-full py-4 rounded-xl font-bold transition-all bg-[#32BCAD] hover:bg-[#2da89b] text-white shadow-lg flex items-center justify-center gap-2 transform hover:scale-[1.02]"
                     >
                       <QrCode size={20} />
